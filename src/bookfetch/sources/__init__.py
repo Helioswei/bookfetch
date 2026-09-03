@@ -5,6 +5,7 @@ from __future__ import annotations
 from ..model import Book
 from .base import Source
 from .ctext import Ctext
+from .github import GithubBooks
 
 _REGISTRY: dict[str, Source] = {}
 
@@ -15,6 +16,7 @@ def _register(src: Source) -> Source:
 
 
 _register(Ctext())
+_register(GithubBooks())
 
 
 def get_source(name: str) -> Source | None:

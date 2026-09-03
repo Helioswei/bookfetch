@@ -7,7 +7,7 @@ import json
 import sys
 
 from . import __version__
-from .model import Book
+from .model import Book, FetchResult
 from .sources import get_source, search_all, source_names
 from .util import FetchError
 
@@ -29,6 +29,31 @@ def _human_get(obj: dict) -> None:
     print(f"  {r['title']} | {r['lines']} paragraphs | {r['chars']} chars | {r['format']}")
 
 
+def _simplify_result(fr: FetchResult) -> FetchResult:
+    """Rewrite a downloaded txt to Simplified Chinese (filename included)."""
+    from pathlib import Path
+
+    from .util import sanitize_filename
+    from .util.simplify import to_simplified
+
+    path = Path(fr.out_path)
+    text = to_simplified(path.read_text(encoding="utf-8"))
+    fname = sanitize_filename(to_simplified(fr.title)) or fr.id
+    new_path = path.parent / f"{fname}.txt"
+    new_path.write_text(text, encoding="utf-8")
+    if new_path != path:
+        path.unlink(missing_ok=True)
+    return FetchResult(
+        source=fr.source,
+        id=fr.id,
+        title=to_simplified(fr.title),
+        out_path=str(new_path),
+        chars=len(text),
+        lines=len(text.splitlines()),
+        format="txt",
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="bookfetch", description=DESC)
     p.add_argument("--version", action="version", version=f"bookfetch {__version__}")
@@ -45,6 +70,11 @@ def main(argv: list[str] | None = None) -> int:
     gp.add_argument("id", help="edition id from search results")
     gp.add_argument("--title", default="", help="optional title override for the output filename")
     gp.add_argument("--out", default=".", help="output directory (default: current dir)")
+    gp.add_argument(
+        "--simplify",
+        action="store_true",
+        help="convert Traditional Chinese to Simplified (requires the [simp] extra: OpenCC)",
+    )
     gp.add_argument("--human", action="store_true", help="human-readable output")
 
     args = p.parse_args(argv)
@@ -64,6 +94,8 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError(f"unknown source {args.source!r} (known: {', '.join(source_names())})")
             book = Book(source=args.source, id=args.id, title=args.title)
             fr = src.fetch(book, out_dir=args.out)
+            if args.simplify:
+                fr = _simplify_result(fr)
             obj = {"cmd": "get", "result": fr.to_dict()}
 
         if getattr(args, "human", False) and args.cmd == "search":

@@ -14,7 +14,7 @@ bookfetch get ctext 727782    # 下载整本书到当前目录
 - 书源路由：按书种/语言分发到可用源，单个源故障不影响整体（errors 独立上报）
 - JSON 优先输出：stdout 只吐结构化 JSON，agent 直接解析；`--human` 给人看
 - 礼貌抓取：内置限速 + 重试退避 + 编码回退（GBK/Big5→UTF-8）
-- **零运行时依赖**：纯 Python 标准库，任何环境装完即用
+- **零运行时依赖**：纯 Python 标准库，任何环境装完即用（简体转换是可选扩展）
 - 离线可测：解析测试基于真实抓包样本（fixtures），不依赖线上
 
 ## 安装
@@ -72,13 +72,34 @@ bookfetch get ctext 727782 --out ./books
 
 把 id 对应的整本书下载为 UTF-8 纯文本（ctext 的书会自动按序抓取全部章节并拼接）。
 
+#### 繁转简（可选）
+
+默认保留古籍繁体原文；需要简体版时加 `--simplify`（需先装可选依赖）：
+
+```bash
+uv tool install bookfetch --extra simp     # 或 pip install 'bookfetch[simp]'
+bookfetch get ctext 727782 --out ./books --simplify
+```
+
+转换基于 OpenCC（t2s），文件与文件名会一并转为简体。古籍存在异体字/通假字，
+转换非 100% 保真，学术用途请以原文为准。
+
 ## 已支持的书源
 
 | 源 | 覆盖 | 说明 |
 |---|---|---|
 | ctext | 中文古籍（免费全文、带标点） | 书目检索 + 多章节整本下载 |
+| github | 公版中文古籍文本仓库 | 精选仓库树索引（7 天缓存），raw 直连下载 |
 
 （英文书源 libgen 等：规划中）
+
+## 源与合规
+
+- bookfetch 是**路由与下载工具**，不存储、不重新分发任何书籍内容；下载物只落在使用者本地
+- 各源内容版权归原作者/整理者所有。公版内容可自由使用；**仍在版权期内的内容，请使用者自行确认下载与使用的合法性**
+- 抓取行为遵守各源访问条款：公开页面、内置限速、不做任何绕过（登录墙/验证码/反爬规避）
+- 测试 fixture 为各源页面/结构的极小样本，仅用于解析测试，来源记录见 tests/fixtures/README.md
+- 任何权利方认为本工具对某源的使用不妥，请提 issue，我们会调整或移除该源
 
 ## 开发与测试
 
@@ -90,9 +111,10 @@ uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 ## 路线图
 
 - [x] M1: ctext 源 + search/get CLI（2026-09-03 完成）
-- [ ] M2: GitHub 古籍文本库源（mymmsc/books 等）
-- [ ] M3: SKILL.md agent 外壳 + PyPI 发布
-- [ ] 规划中: 英文书源（libgen 镜像链）、epub 转换、格式钩子
+- [x] M2: github 古籍源 + OpenCC 简繁转换 + 合规声明（2026-09-03 完成）
+- [ ] M3: EPUB 转换 + 章节切分（格式友好化）
+- [ ] M4: 英文现代书源（libgen 镜像链）、中文公版书（维基文库）、白话注解站 spike（成则加源）
+- [ ] 规划中: SKILL.md agent 外壳 + PyPI 发布
 
 ## 许可
 

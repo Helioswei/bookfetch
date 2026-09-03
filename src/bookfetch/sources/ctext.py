@@ -90,11 +90,8 @@ class Ctext(Source):
     name = "ctext"
 
     def search(self, query: str) -> list[Book]:
-        """Search ctext 書名檢索. Returns [] on network failure."""
-        try:
-            page = fetch(SEARCH_URL.format(q=quote(query)))
-        except FetchError:
-            return []
+        """Search ctext 書名檢索. Network errors propagate to the CLI errors dict."""
+        page = fetch(SEARCH_URL.format(q=quote(query)))
         return _parse_search_page(page)
 
     def fetch(self, book: Book, out_dir: str | Path = ".") -> FetchResult:
