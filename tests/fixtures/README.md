@@ -9,3 +9,6 @@ structural excerpts from public sources, used for parser testing only:
 | res_book.html | https://ctext.org/wiki.pl?if=gb&res=727782 | 2026-09-03 | 淵海子平 res page with chapter links (13KB) |
 | chapter_296619_head.html | https://ctext.org/wiki.pl?if=gb&chapter=296619 | 2026-09-03 | first 10 paragraph rows of the wiki text (12KB) |
 | gbooks_tree.json | https://api.github.com/repos/mymmsc/books/git/trees/HEAD?recursive=1 | 2026-09-03 | 26-entry excerpt of the repo blob tree |
+| ws_nahan_main.html | https://zh.wikisource.org/w/api.php?action=parse&page=吶喊 | 2026-09-04 | 《吶喊》rendered page (TOC + 自序 proofread text) |
+| ws_kuangren.html | https://zh.wikisource.org/w/api.php?action=parse&page=狂人日記 | 2026-09-04 | 《狂人日記》rendered story page, sections 一..十三 |
+| libgen_parked.html | https://libgen.lc/json.php | 2026-09-04 | parked-domain HTML returned where JSON is expected (negative probe sample) |

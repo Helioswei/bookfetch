@@ -1,6 +1,6 @@
 [project]
 name = "bookfetch"
-version = "0.2.0"
+version = "0.3.0"
 description = "Agent-friendly ebook finder CLI: routes book queries to working sources (Chinese classics first)."
 readme = "README.md"
 requires-python = ">=3.10"

@@ -45,8 +45,24 @@ def _ensure_chapters(fr: FetchResult) -> list[Chapter]:
 
 
 def _render_get(src, book: Book, args) -> FetchResult:
-    """Fetch -> optional simplify -> render txt/epub under --out."""
+    """Fetch -> optional simplify -> render txt/epub under --out.
+
+    Binary sources (libgen etc.) return FetchResult.raw and are saved
+    byte-for-byte; text-only flags (--simplify/--split/--format) reject them.
+    """
     fr = src.fetch(book)
+
+    if fr.raw is not None:  # binary passthrough: save the original file
+        if args.simplify or args.split or args.format != "txt":
+            raise ValueError(f"源 {fr.source} 是二进制原文件（.{fr.format}），不支持 --simplify/--split/--format")
+        fname = sanitize_filename(fr.title) or fr.id
+        out_dir = Path(args.out)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        path = out_dir / f"{fname}.{fr.format}"
+        path.write_bytes(fr.raw)
+        fr.out_path = str(path)
+        return fr
+
     chapters = _ensure_chapters(fr)
 
     if args.simplify:

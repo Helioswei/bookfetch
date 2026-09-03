@@ -96,8 +96,11 @@ bookfetch get ctext 727782 --out ./books --simplify
 |---|---|---|
 | ctext | 中文古籍（免费全文、带标点） | 书目检索 + 多章节整本下载 |
 | github | 公版中文古籍文本仓库 | 精选仓库树索引（7 天缓存），raw 直连下载 |
+| wikisource | 中文/英文公版书（含现代公版：鲁迅等） | MediaWiki API + 渲染页解析，目录自动展开整本；大陆访问需代理 |
+| libgen | 英文现代书（原文件 epub/pdf） | 探活式镜像链（域名轮换频繁），当前镜像不可达时会明确报错；需代理 |
 
-（英文书源 libgen 等：规划中）
+> 网络提示：ctext/github 大陆直连可用；wikisource（Wikimedia）与 libgen 大陆直连不通，
+> 需能访问对应站点的网络环境（如代理），本工具遵循系统 http_proxy/https_proxy 环境变量。
 
 ## 源与合规
 
@@ -119,7 +122,7 @@ uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 - [x] M1: ctext 源 + search/get CLI（2026-09-03 完成）
 - [x] M2: github 古籍源 + OpenCC 简繁转换 + 合规声明（2026-09-03 完成）
 - [x] M3: EPUB 转换 + 章节切分（2026-09-04 完成，零依赖手写 zip+xhtml）
-- [ ] M4: 英文现代书源（libgen 镜像链）、中文公版书（维基文库）、白话注解站 spike（成则加源）
+- [x] M4: wikisource 中/英公版源 + libgen 探活镜像链 + 白话注解 spike（2026-09-04 完成；白话注解判定放弃，见 PRD）
 - [ ] 规划中: SKILL.md agent 外壳 + PyPI 发布
 
 ## 许可

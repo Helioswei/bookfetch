@@ -32,21 +32,41 @@ def _pace(host: str) -> None:
 
 def fetch(url: str, *, timeout: float = 30.0, retries: int = _max_retries) -> str:
     """GET a URL and return decoded text. Retries with backoff on failure."""
+    return decode_bytes(fetch_bytes(url, timeout=timeout, retries=retries))
+
+
+def fetch_bytes(url: str, *, timeout: float = 30.0, retries: int = _max_retries) -> bytes:
+    """GET a URL and return raw bytes. Retries with backoff on failure.
+
+    429 (rate limit) gets a long, Retry-After-aware backoff: sources like
+    Wikimedia throttle anonymous bursts and recover in tens of seconds.
+    """
     from urllib.parse import urlparse
 
     host = urlparse(url).netloc
     last_err: Exception | None = None
-    for attempt in range(retries):
+    for attempt in range(retries + 1):  # +1 spare for the 429 long-wait path
         _pace(host)
         req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9"})
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                data = resp.read()
-            return decode_bytes(data)
-        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as e:
+                return resp.read()
+        except urllib.error.HTTPError as e:
             last_err = e
-            if attempt < retries - 1:
+            if e.code == 429:
+                wait = 10.0
+                try:
+                    wait = max(wait, float(e.headers.get("Retry-After", 10)))
+                except (TypeError, ValueError):
+                    pass
+                time.sleep(wait)
+                continue  # rate limit: wait long, then give it another go
+            if attempt < retries:
                 time.sleep(3.0 * (attempt + 1))  # 3s, 6s backoff
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            last_err = e
+            if attempt < retries:
+                time.sleep(3.0 * (attempt + 1))
     raise FetchError(f"GET {url} failed after {retries} tries: {last_err}")
 
 

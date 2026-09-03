@@ -49,6 +49,7 @@ class FetchResult:
     format: str = "txt"
     content: str = ""
     chapters: list[Chapter] | None = None
+    raw: bytes | None = None  # binary sources (libgen): file bytes, no text pipeline
 
     def to_dict(self) -> dict:
         return {

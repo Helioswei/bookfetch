@@ -6,6 +6,8 @@ from ..model import Book
 from .base import Source
 from .ctext import Ctext
 from .github import GithubBooks
+from .libgen import Libgen
+from .wikisource import Wikisource
 
 _REGISTRY: dict[str, Source] = {}
 
@@ -17,6 +19,9 @@ def _register(src: Source) -> Source:
 
 _register(Ctext())
 _register(GithubBooks())
+_register(Wikisource("zh"))
+_register(Wikisource("en"))
+_register(Libgen())
 
 
 def get_source(name: str) -> Source | None:
