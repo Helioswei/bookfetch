@@ -21,14 +21,20 @@ bookfetch get ctext 727782    # 下载整本书到当前目录
 
 ## 安装
 
-需要 Python >= 3.10。
+需要 Python >= 3.10。已发布到 PyPI：
 
 ```bash
-# 推荐：uv
-uv tool install git+https://github.com/Helioswei/bookfetch.git
+# 推荐：uv（或 pipx）
+uv tool install bookfetch
 
 # 或 pip
-pip install git+https://github.com/Helioswei/bookfetch.git
+pip install bookfetch
+
+# 需要繁→简转换时（OpenCC，可选）
+uv tool install "bookfetch[simp]"
+
+# 从源码（开发版）
+uv tool install git+https://github.com/Helioswei/bookfetch.git
 
 # 本地开发
 uv sync && uv run bookfetch search 论语
@@ -123,8 +129,7 @@ uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 - [x] M2: github 古籍源 + OpenCC 简繁转换 + 合规声明（2026-09-03 完成）
 - [x] M3: EPUB 转换 + 章节切分（2026-09-04 完成，零依赖手写 zip+xhtml）
 - [x] M4: wikisource 中/英公版源 + libgen 探活镜像链 + 白话注解 spike（2026-09-04 完成；白话注解判定放弃，见 PRD）
-- [x] M5: SKILL.md agent 外壳 + 发布前核查（2026-09-04 完成：仓库已 public、PyPI 包名未占用、wheel/console script 全链路验证；PyPI 上传待凭证）
-- [ ] PyPI 上传（待用户提供 API token）
+- [x] M5: SKILL.md agent 外壳 + PyPI 发布（2026-09-04 完成：仓库已 public、PyPI bookfetch 0.3.0 已上传，安装链路端到端验证通过）
 
 ## 许可
 
