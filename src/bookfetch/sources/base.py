@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from pathlib import Path
 
 from ..model import Book, FetchResult
 
@@ -20,5 +19,6 @@ class Source(ABC):
         callers surface errors via the errors dict instead."""
 
     @abstractmethod
-    def fetch(self, book: Book, out_dir: str | Path = ".") -> FetchResult:
-        """Download the book edition and write it under out_dir."""
+    def fetch(self, book: Book) -> FetchResult:
+        """Fetch and parse one edition into content + optional chapter
+        structure. Never writes files — the CLI renders txt/epub."""

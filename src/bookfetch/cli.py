@@ -5,11 +5,15 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from . import __version__
-from .model import Book, FetchResult
+from .model import Book, Chapter, FetchResult
 from .sources import get_source, search_all, source_names
-from .util import FetchError
+from .util import FetchError, sanitize_filename
+from .util.epub import build_epub
+from .util.simplify import to_simplified
+from .util.splitters import split_headings
 
 DESC = "Agent-friendly ebook finder: routes book queries to working sources."
 
@@ -26,32 +30,58 @@ def _human_search(obj: dict) -> None:
 def _human_get(obj: dict) -> None:
     r = obj["result"]
     print(f"Saved: {r['out_path']}")
-    print(f"  {r['title']} | {r['lines']} paragraphs | {r['chars']} chars | {r['format']}")
+    extra = f" | {len(r['chapters'])} chapters" if r.get("chapters") else ""
+    print(f"  {r['title']} | {r['lines']} paragraphs | {r['chars']} chars | {r['format']}{extra}")
 
 
-def _simplify_result(fr: FetchResult) -> FetchResult:
-    """Rewrite a downloaded txt to Simplified Chinese (filename included)."""
-    from pathlib import Path
+def _ensure_chapters(fr: FetchResult) -> list[Chapter]:
+    """Chapters from the source, or heading-split, or one whole-text chapter."""
+    if fr.chapters:
+        return list(fr.chapters)
+    chs = split_headings(fr.content.splitlines())
+    if chs:
+        return chs
+    return [Chapter(title=fr.title or fr.id, text=fr.content)]
 
-    from .util import sanitize_filename
-    from .util.simplify import to_simplified
 
-    path = Path(fr.out_path)
-    text = to_simplified(path.read_text(encoding="utf-8"))
-    fname = sanitize_filename(to_simplified(fr.title)) or fr.id
-    new_path = path.parent / f"{fname}.txt"
-    new_path.write_text(text, encoding="utf-8")
-    if new_path != path:
-        path.unlink(missing_ok=True)
-    return FetchResult(
-        source=fr.source,
-        id=fr.id,
-        title=to_simplified(fr.title),
-        out_path=str(new_path),
-        chars=len(text),
-        lines=len(text.splitlines()),
-        format="txt",
-    )
+def _render_get(src, book: Book, args) -> FetchResult:
+    """Fetch -> optional simplify -> render txt/epub under --out."""
+    fr = src.fetch(book)
+    chapters = _ensure_chapters(fr)
+
+    if args.simplify:
+        chapters = [Chapter(title=to_simplified(c.title), text=to_simplified(c.text)) for c in chapters]
+        fr.title = to_simplified(fr.title)
+
+    fname = sanitize_filename(fr.title) or fr.id
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.format == "epub":
+        path = build_epub(fr.title, chapters, out_dir / f"{fname}.epub")
+        text_chars = sum(len(c.text) for c in chapters)
+        n_lines = sum(len(c.text.splitlines()) for c in chapters)
+    else:  # txt
+        if args.split and len(chapters) > 1:
+            parts = []
+            for i, c in enumerate(chapters, 1):
+                head = c.title or f"第{i}部分"
+                parts.append(f"=== {head} ===\n{c.text}")
+            text = "\n\n".join(parts) + "\n"
+        elif args.simplify:
+            text = "\n".join(c.text for c in chapters) + "\n"
+        else:
+            text = fr.content  # byte-identical to the fetched text
+        path = out_dir / f"{fname}.txt"
+        path.write_text(text, encoding="utf-8")
+        text_chars = len(text)
+        n_lines = len(text.splitlines())
+
+    fr.out_path = str(path)
+    fr.format = args.format
+    fr.chars = text_chars
+    fr.lines = n_lines
+    return fr
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -70,6 +100,17 @@ def main(argv: list[str] | None = None) -> int:
     gp.add_argument("id", help="edition id from search results")
     gp.add_argument("--title", default="", help="optional title override for the output filename")
     gp.add_argument("--out", default=".", help="output directory (default: current dir)")
+    gp.add_argument(
+        "--format",
+        choices=["txt", "epub"],
+        default="txt",
+        help="output format (default: txt; epub needs no extra deps)",
+    )
+    gp.add_argument(
+        "--split",
+        action="store_true",
+        help="insert '=== 章节 ===' separators into txt output (epub is always split)",
+    )
     gp.add_argument(
         "--simplify",
         action="store_true",
@@ -93,9 +134,7 @@ def main(argv: list[str] | None = None) -> int:
             if src is None:
                 raise ValueError(f"unknown source {args.source!r} (known: {', '.join(source_names())})")
             book = Book(source=args.source, id=args.id, title=args.title)
-            fr = src.fetch(book, out_dir=args.out)
-            if args.simplify:
-                fr = _simplify_result(fr)
+            fr = _render_get(src, book, args)
             obj = {"cmd": "get", "result": fr.to_dict()}
 
         if getattr(args, "human", False) and args.cmd == "search":

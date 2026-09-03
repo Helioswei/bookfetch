@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import html
 import re
-from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
-from ..model import Book, FetchResult
-from ..util import FetchError, fetch, sanitize_filename
+from ..model import Book, Chapter, FetchResult
+from ..util import FetchError, fetch
+from ..util.splitters import split_headings
 from .base import Source
 
 SEARCH_URL = "https://ctext.org/searchbooks.pl?if=gb&searchu={q}"
@@ -86,6 +86,13 @@ def _parse_text_cells(page: str) -> list[str]:
     return lines
 
 
+def _chapter_title(anchor: str, idx: int) -> str:
+    """Wiki-page anchor text, or a neutral ordinal for unnamed pages
+    (most wiki pages of one book share the book title as anchor)."""
+    t = _strip_tags(anchor)
+    return t or f"第{idx}部分"
+
+
 class Ctext(Source):
     name = "ctext"
 
@@ -94,44 +101,51 @@ class Ctext(Source):
         page = fetch(SEARCH_URL.format(q=quote(query)))
         return _parse_search_page(page)
 
-    def fetch(self, book: Book, out_dir: str | Path = ".") -> FetchResult:
-        """Download a full book: res page -> ordered chapters -> concatenated text."""
+    def fetch(self, book: Book) -> FetchResult:
+        """Fetch a whole book: res page -> ordered wiki pages -> chapters.
+
+        Each wiki page becomes one or more chapters: standalone 《》/卷
+        heading lines split it into titled sections; a page without such
+        structure stays one chapter named by its anchor.
+        """
         rid = book.id
         if not rid.isdigit():
             raise ValueError(f"ctext id must be a res/chapter number, got: {book.id!r}")
-        try:
-            res_page = fetch(RES_URL.format(rid=rid))
-        except FetchError:
-            raise
 
-        chapters = list(dict.fromkeys(_CHAPTER_RE.findall(res_page)))
-        if not chapters:
+        res_page = fetch(RES_URL.format(rid=rid))
+        anchors = list(dict.fromkeys(_CHAPTER_RE.findall(res_page)))
+        if not anchors:
             raise FetchError(f"ctext res page {rid} lists no text chapters")
 
-        title = book.title or chapters[0][1].strip()
-        lines: list[str] = []
-        for cid, _anchor in chapters:
+        title = book.title or _strip_tags(anchors[0][1])
+        chapters: list[Chapter] = []
+        all_lines: list[str] = []
+        for idx, (cid, anchor) in enumerate(anchors, 1):
             try:
                 page = fetch(CHAPTER_URL.format(cid=cid))
             except FetchError as e:
                 raise FetchError(f"chapter {cid} failed: {e}") from e
-            lines.extend(_parse_text_cells(page))
+            lines = _parse_text_cells(page)
+            if not lines:
+                continue
+            all_lines.extend(lines)
+            page_chs = split_headings(lines)
+            if page_chs:
+                chapters.extend(page_chs)
+            else:
+                chapters.append(Chapter(title=_chapter_title(anchor, idx), text="\n".join(lines)))
 
-        if not lines:
+        if not all_lines:
             raise FetchError(f"no text extracted from chapters of res {rid}")
 
-        out_dir = Path(out_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        fname = sanitize_filename(title) or rid
-        out_path = out_dir / f"{fname}.txt"
-        text = "\n".join(lines) + "\n"
-        out_path.write_text(text, encoding="utf-8")
+        content = "\n".join(c.text for c in chapters) + "\n"
         return FetchResult(
             source=self.name,
             id=rid,
             title=title,
-            out_path=str(out_path),
-            chars=len(text),
-            lines=len(lines),
+            chars=len(content),
+            lines=len(all_lines),
             format="txt",
+            content=content,
+            chapters=chapters,
         )

@@ -12,6 +12,8 @@ bookfetch get ctext 727782    # 下载整本书到当前目录
 ## 特性
 
 - 书源路由：按书种/语言分发到可用源，单个源故障不影响整体（errors 独立上报）
+- **EPUB / 章节感知**：`--format epub` 零依赖生成手机可读的 epub（含目录）；`--split`
+  在 txt 中插入章节分隔；古籍《》/卷/序跋类标题行自动识别为章节
 - JSON 优先输出：stdout 只吐结构化 JSON，agent 直接解析；`--human` 给人看
 - 礼貌抓取：内置限速 + 重试退避 + 编码回退（GBK/Big5→UTF-8）
 - **零运行时依赖**：纯 Python 标准库，任何环境装完即用（简体转换是可选扩展）
@@ -67,10 +69,14 @@ bookfetch search <书名>
 ### 下载
 
 ```bash
-bookfetch get ctext 727782 --out ./books
+bookfetch get ctext 727782 --out ./books            # 默认 txt（整本合并）
+bookfetch get ctext 727782 --format epub --out ./books   # 手机友好的 epub（自动分章+目录）
+bookfetch get ctext 727782 --split --out ./books    # txt 中插入 === 章节 === 分隔
 ```
 
 把 id 对应的整本书下载为 UTF-8 纯文本（ctext 的书会自动按序抓取全部章节并拼接）。
+`epub` 与 `--split` 的章节来自源结构（ctext 分页）或《》/卷/序跋类标题行自动识别；
+正文一字不改，标题行仅在阅读视图去重。
 
 #### 繁转简（可选）
 
@@ -112,7 +118,7 @@ uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 
 - [x] M1: ctext 源 + search/get CLI（2026-09-03 完成）
 - [x] M2: github 古籍源 + OpenCC 简繁转换 + 合规声明（2026-09-03 完成）
-- [ ] M3: EPUB 转换 + 章节切分（格式友好化）
+- [x] M3: EPUB 转换 + 章节切分（2026-09-04 完成，零依赖手写 zip+xhtml）
 - [ ] M4: 英文现代书源（libgen 镜像链）、中文公版书（维基文库）、白话注解站 spike（成则加源）
 - [ ] 规划中: SKILL.md agent 外壳 + PyPI 发布
 

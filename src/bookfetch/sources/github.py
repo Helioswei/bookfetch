@@ -19,7 +19,8 @@ from pathlib import Path
 from urllib.parse import quote
 
 from ..model import Book, FetchResult
-from ..util import FetchError, fetch, sanitize_filename
+from ..util import FetchError, fetch
+from ..util.splitters import split_headings
 from .base import Source
 
 _REPOS: list[dict] = [
@@ -119,7 +120,8 @@ class GithubBooks(Source):
             books.extend(_search_paths(paths, cfg, query))
         return books
 
-    def fetch(self, book: Book, out_dir: str | Path = ".") -> FetchResult:
+    def fetch(self, book: Book) -> FetchResult:
+        """Fetch one raw txt file; chapter structure comes from headings."""
         repo, sep, path = book.id.partition(":")
         if not sep or not repo or not path:
             raise ValueError("github id must look like 'owner/repo:path/to/book.txt'")
@@ -131,17 +133,20 @@ class GithubBooks(Source):
         )
         text = fetch(raw_url)  # decode handles UTF-8 / GB18030 / Big5
         title = book.title or path.rsplit("/", 1)[-1][:-4] or repo
-        out_dir = Path(out_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        fname = sanitize_filename(title)
-        out_path = out_dir / f"{fname}.txt"
-        out_path.write_text(text, encoding="utf-8")
+        lines = text.splitlines()
+        chapters = split_headings(lines)
+        if chapters:
+            content = "\n".join(c.text for c in chapters)
+        else:
+            chapters = None
+            content = text
         return FetchResult(
             source=self.name,
             id=book.id,
             title=title,
-            out_path=str(out_path),
-            chars=len(text),
-            lines=len(text.splitlines()),
+            chars=len(content),
+            lines=len(lines),
             format="txt",
+            content=content,
+            chapters=chapters,
         )
