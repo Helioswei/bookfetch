@@ -6,6 +6,7 @@ build/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+.DS_Store
 
 # 内部规划文档，不上传（决策过程/商业意图属于本地留档）
 docs/PRD.md
