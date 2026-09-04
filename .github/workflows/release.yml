@@ -1,0 +1,36 @@
+name: release
+
+# 打 tag v*（如 v0.4.0）→ 构建 mac/win 桌面包并挂到该 tag 的 GitHub Release。
+# 一条命令发版：bash scripts/release.sh v0.4.0
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  desktop:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macos-arm64
+            os: macos-14          # Apple 芯片 (M1+)；Intel Mac 走 CLI/PyPI
+            zip: bookfetch-macos-arm64.zip
+          - label: windows-x64
+            os: windows-latest
+            zip: bookfetch-windows-x64.zip
+    steps:
+      - uses: ./.github/actions/desktop-build
+        with:
+          zip-name: ${{ matrix.zip }}
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.zip }}
+          generate_release_notes: true

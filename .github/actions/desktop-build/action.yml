@@ -1,0 +1,46 @@
+name: desktop-build
+description: |
+  Shared build: install deps → pytest gate → PyInstaller → zip.
+  Caller supplies the zip name; the zip lands in the repo root.
+
+inputs:
+  zip-name:
+    description: Artifact zip file name, e.g. bookfetch-macos-arm64.zip
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+
+    - uses: astral-sh/setup-uv@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install deps (gui + dev)
+      shell: bash
+      run: uv sync --extra gui --group dev
+
+    - name: Tests
+      shell: bash
+      run: uv run pytest tests/ -q
+
+    - name: Build (macOS, via bookfetch.spec)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: uv run pyinstaller bookfetch.spec --noconfirm
+
+    - name: Build (Windows, equivalent CLI flags)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: uv run pyinstaller --noconfirm --windowed --name bookfetch --collect-all webview --add-data "src/bookfetch/static;bookfetch/static" packaging/desktop_entry.py
+
+    - name: Package zip (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: cd dist && zip -rqy ../${{ inputs.zip-name }} bookfetch.app
+
+    - name: Package zip (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: Compress-Archive -Path dist/bookfetch -DestinationPath ${{ inputs.zip-name }} -Force

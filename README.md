@@ -172,6 +172,17 @@ uv sync --group dev
 uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 ```
 
+## 发布（桌面包 + PyPI）
+
+- **每次推 main**：GitHub Actions 自动构建 mac/win 桌面包 → Actions artifact（最新包随时可取）
+- **正式发版**（一条命令，触发构建并挂到 Release 页）：
+
+```bash
+bash scripts/release.sh v0.4.0     # 打 tag 并推送 → Release 附件出现 mac/win zip
+```
+
+- PyPI 发布（CLI 形态）自理：`uv build && uv publish`（需 PyPI token）
+
 ## 路线图
 
 - [x] M1: ctext 源 + search/get CLI（2026-09-03 完成）

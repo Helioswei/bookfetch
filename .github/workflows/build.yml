@@ -1,0 +1,39 @@
+name: build
+
+# 每次推 main → 自动构建 mac/win 桌面包 → Actions artifact（最新包随时可取）；
+# 正式对外发布打 tag（见 release.yml）。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macos-arm64
+            os: macos-14          # Apple 芯片 (M1+)；Intel Mac 走 CLI/PyPI
+            zip: bookfetch-macos-arm64.zip
+          - label: windows-x64
+            os: windows-latest
+            zip: bookfetch-windows-x64.zip
+    steps:
+      - uses: ./.github/actions/desktop-build
+        with:
+          zip-name: ${{ matrix.zip }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.zip }}
+          path: ${{ matrix.zip }}
+          if-no-files-found: error
