@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import re
+import subprocess
 import threading
 import zipfile
 from argparse import Namespace
@@ -516,6 +517,22 @@ def translate(rel: str, idx: int) -> dict:
     return {"rel": rel, "i": idx, "trs": trs}
 
 
+def open_activator() -> dict:
+    """拉起「翻译语言包准备器」（SwiftUI，用户点一下完成下载+安装）。
+
+    首次翻译遇 notInstalled 时前端调用；激活器是独立 .app，由 LaunchServices
+    open 拉起（自带 UI 会话，才有语言包下载权限——pywebview 会话没有）。
+    """
+    from .util.translator import find_activator
+
+    p = find_activator()
+    try:
+        subprocess.Popen(["open", str(p)])  # detach，激活器独立进程
+    except OSError as e:
+        raise ValueError(f"无法打开翻译语言包准备器：{e}") from None
+    return {"ok": True, "activator": str(p)}
+
+
 def _load_progress() -> dict:
     if not _PROGRESS.exists():
         return {}
@@ -559,6 +576,8 @@ def api_call(name: str, params: dict) -> dict:
         return chapter(params.get("rel", ""), int(params.get("idx", 0)), bool(params.get("simp", False)))
     if name == "translate":
         return translate(params.get("rel", ""), int(params.get("idx", 0)))
+    if name == "open_activator":
+        return open_activator()
     if name == "progress_get":
         return progress_get(params.get("rel", ""))
     if name == "progress_set":
@@ -576,6 +595,6 @@ def api_call(name: str, params: dict) -> dict:
 
 BUILTIN_API = {
     "search", "download", "cancel", "task_status", "shelf", "open_book",
-    "chapter", "translate", "progress_get", "progress_set", "library", "sources",
-    "settings_get", "settings_set",
+    "chapter", "translate", "open_activator", "progress_get", "progress_set",
+    "library", "sources", "settings_get", "settings_set",
 }

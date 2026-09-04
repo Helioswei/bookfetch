@@ -325,3 +325,30 @@ def test_chapter_has_latin_flag(env):
     assert n2core.chapter(rel, 0)["hasLatin"] is True
     rel2 = _write_book(env, "中書", [Chapter("第一章", "汉字正文内容若干。")])
     assert n2core.chapter(rel2, 0)["hasLatin"] is False
+
+
+def test_open_activator_launches(env, monkeypatch):
+    """open_activator 定位激活器并用 open 拉起（detach）。"""
+    calls = []
+
+    def fake_find():
+        return env / "TranslationActivator.app"
+
+    def fake_popen(cmd):
+        calls.append(cmd)
+        return object()
+
+    monkeypatch.setattr("bookfetch.util.translator.find_activator", fake_find)
+    monkeypatch.setattr(n2core.subprocess, "Popen", fake_popen)
+    r = n2core.open_activator()
+    assert r["ok"] is True
+    assert calls == [["open", str(env / "TranslationActivator.app")]]
+
+
+def test_open_activator_missing_raises(env, monkeypatch):
+    def boom():
+        raise ValueError("翻译语言包准备器缺失（macOS 26.4+ 的 bookfetch.app 应自带）")
+
+    monkeypatch.setattr("bookfetch.util.translator.find_activator", boom)
+    with pytest.raises(ValueError, match="准备器缺失"):
+        n2core.open_activator()

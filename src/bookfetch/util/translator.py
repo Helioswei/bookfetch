@@ -47,10 +47,35 @@ def _bridge_candidates() -> list[Path]:
         cands.append(Path(env))
     mei = getattr(sys, "_MEIPASS", None)  # PyInstaller 解包目录
     if mei:
+        # onedir 会剥离 datas 目标的 app 名前缀（'bookfetch/x' → _MEIPASS/x），
+        # 也兼容未剥离形态；Resources 真身在 _MEIPASS 的 symlink 后可见
         cands.append(Path(mei) / "bookfetch" / "translate_bridge")
+        cands.append(Path(mei) / "translate_bridge")
     repo = Path(__file__).resolve().parents[3]  # src/bookfetch/util → 仓库根
     cands.append(repo / "packaging" / "build" / "translate_bridge")
     return cands
+
+
+def _activator_candidates() -> list[Path]:
+    """语言包准备器 .app（首次翻译未装语言包时拉起，让用户点一下完成下载+安装）。"""
+    cands: list[Path] = []
+    env = os.environ.get("BOOKFETCH_TRANSLATE_ACTIVATOR")
+    if env:
+        cands.append(Path(env))
+    mei = getattr(sys, "_MEIPASS", None)
+    if mei:
+        cands.append(Path(mei) / "bookfetch" / "TranslationActivator.app")
+        cands.append(Path(mei) / "TranslationActivator.app")
+    repo = Path(__file__).resolve().parents[3]
+    cands.append(repo / "packaging" / "activator" / "TranslationActivator.app")
+    return cands
+
+
+def find_activator() -> Path:
+    for p in _activator_candidates():
+        if (p / "Contents" / "MacOS" / "TranslationActivator").is_file():
+            return p
+    raise ValueError("翻译语言包准备器缺失（macOS 26.4+ 的 bookfetch.app 应自带）")
 
 
 def _find_bridge() -> Path:

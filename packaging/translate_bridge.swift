@@ -45,7 +45,7 @@ struct TranslateBridge {
                 }
             } else {
                 errOut("notInstalled",
-                       "系统翻译语言包未安装：请先在系统设置 → 通用 → 语言与地区 → 翻译中下载简体中文，或在任意英文网页用 Safari 翻译一次触发安装")
+                       "翻译语言包未安装：请在 bookfetch 中打开「翻译语言包准备器」完成首次安装（约 1GB），或在系统设置 → 通用 → 语言与地区 → 翻译中下载简体中文")
             }
         }
         if await !session.isReady {

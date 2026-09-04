@@ -11,3 +11,4 @@ build/
 # 内部规划文档，不上传（决策过程/商业意图属于本地留档）
 docs/PRD.md
 docs/design-mock.html
+packaging/activator/TranslationActivator.app

@@ -446,7 +446,17 @@ async function translateChapter() {
     renderTrs();
   } catch (e) {
     if (seq !== _trSeq) return;
-    alert('翻译失败：' + (e.message || '系统翻译不可用'));
+    const msg = e.message || '系统翻译不可用';
+    if (msg.includes('翻译语言包')) {
+      // N3 首次引导：语言包未装 → 拉起 SwiftUI 准备器（pywebview 会话无下载权限）
+      const ok = confirm('英译中需要 macOS 系统翻译语言包（首次一次性下载约 1GB，之后完全离线）。\n\n点「确定」打开「翻译语言包准备器」完成首次安装；装好后回到这里再点「译」即可。');
+      if (ok) {
+        try { await BF.api('open_activator', {}); }
+        catch (e2) { alert('打开准备器失败：' + (e2.message || '')); }
+      }
+    } else {
+      alert('翻译失败：' + msg);
+    }
   } finally {
     if (seq === _trSeq) { _trBusy = false; b.disabled = false; b.classList.remove('busy'); }
   }

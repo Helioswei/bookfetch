@@ -68,3 +68,16 @@ def test_translate_bridge_missing_raises_friendly(monkeypatch):
 
 def test_translate_paragraphs_empty():
     assert translate_paragraphs([]) == []
+
+
+def test_find_activator_locates_repo_app():
+    """开发环境：仓库 packaging/activator/ 下编译产物应被定位到。"""
+    p = translator.find_activator()
+    assert p.name == "TranslationActivator.app"
+    assert (p / "Contents" / "MacOS" / "TranslationActivator").is_file()
+
+
+def test_find_activator_missing_raises(monkeypatch):
+    monkeypatch.setattr(translator, "_activator_candidates", lambda: [])
+    with pytest.raises(ValueError, match="准备器缺失"):
+        translator.find_activator()
