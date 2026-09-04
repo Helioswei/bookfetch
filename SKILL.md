@@ -3,7 +3,8 @@ name: bookfetch
 description: >-
   用户需要获取电子书/古籍/公版书/现代书（找书、搜书、下载整本书、转格式）时使用。
   bookfetch 是按书种自动路由的电子书获取 CLI：ctext（中文古籍全文）、GitHub 古籍文本库、
-  Wikisource 中/英公版书（含鲁迅等现代公版）、libgen 探活镜像（英文现代书）。默认输出
+  Wikisource 中/英公版书（含鲁迅等现代公版）、Gutenberg 英文公版 7 万+、libgen 探活镜像
+  （英文现代书）。默认输出
   结构化 JSON（agent 友好），支持 txt/epub 输出、章节切分、可选繁转简。
 ---
 
@@ -25,7 +26,7 @@ uv tool install bookfetch          # 或 pipx install bookfetch
 uv tool install "bookfetch[simp]"  # 需要繁→简转换时（OpenCC）
 ```
 
-中国大陆网络注意：ctext / GitHub raw 直连可用；Wikisource / libgen 需代理，
+中国大陆网络注意：ctext / GitHub raw / Gutenberg 直连可用；Wikisource / libgen 需代理，
 bookfetch 遵守 `http_proxy`/`https_proxy` 环境变量（设了即走代理）。
 
 ## 命令速查
@@ -34,7 +35,8 @@ bookfetch 遵守 `http_proxy`/`https_proxy` 环境变量（设了即走代理）
 # 跨源搜索（默认全源；JSON 到 stdout，errors 字典报单源失败）
 bookfetch search 渊海子平
 bookfetch search 呐喊 --source wikisource --human     # 限定源 / 人类可读
-bookfetch search "alice in wonderland" --source wikisource-en
+bookfetch search "alice in wonderland" --source gutenberg --human   # 英文公版（Gutenberg）
+bookfetch get gutenberg 11 --title "Alice's Adventures in Wonderland" --format epub
 
 # 下载（id 取 search 输出的 source + id 字段）
 bookfetch get ctext 727782 --out ~/books --human

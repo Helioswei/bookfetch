@@ -6,6 +6,7 @@ from ..model import Book
 from .base import Source
 from .ctext import Ctext
 from .github import GithubBooks
+from .gutenberg import Gutenberg
 from .libgen import Libgen
 from .wikisource import Wikisource
 
@@ -19,6 +20,7 @@ def _register(src: Source) -> Source:
 
 _register(Ctext())
 _register(GithubBooks())
+_register(Gutenberg())
 _register(Wikisource("zh"))
 _register(Wikisource("en"))
 _register(Libgen())
