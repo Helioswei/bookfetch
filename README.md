@@ -26,7 +26,7 @@ bookfetch serve               # 浏览器 UI（搜索/书架/阅读器），自�
 
 一个 App 搞定搜索/下载/书架/阅读，无需终端：
 
-1. 下载 `bookfetch-macos.zip`（约 15MB；GitHub Releases 页面，尚未上传时可向维护者索取），双击解压出 `bookfetch.app`
+1. 下载 Mac 版 zip（GitHub Releases 页的 `bookfetch-macos-arm64.zip`，约 15MB；适用于 Apple 芯片 M1 及以后的 Mac，Intel Mac 请走下方 CLI 方式；尚未上传时可向维护者索取），双击解压出 `bookfetch.app`
 2. 把 `bookfetch.app` 拖进"应用程序"文件夹
 3. 首次打开：因为尚未购买 Apple 开发者签名（$99/年），系统会拦截一次——**右键点 `bookfetch.app` → 选"打开" → 弹窗里再点一次"打开"**，之后即可正常双击启动
 4. 书库在 `~/Books`（首次启动自动创建），下载的书都存在这里；进度自动记忆，下次接着读
