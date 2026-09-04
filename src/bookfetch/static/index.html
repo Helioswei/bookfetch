@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>bookfetch</title>
+<link rel="stylesheet" href="/static/vendor/pico.min.css"/>
+<link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+<header class="topbar container-fluid">
+  <div class="brand"><span class="logo">📚</span> bookfetch</div>
+  <nav class="tabs">
+    <button id="tab-search" class="tab active" data-view="search">搜索</button>
+    <button id="tab-shelf" class="tab" data-view="shelf">书架</button>
+    <button id="tab-theme" class="ghost-btn" title="切换明暗">🌗</button>
+  </nav>
+</header>
+
+<main class="container-fluid">
+  <!-- ============ 搜索视图 ============ -->
+  <section id="view-search" class="view">
+    <form id="search-form" class="search-row">
+      <input id="search-q" type="search" placeholder="书名 / 关键词，如 诡秘之主、本草纲目、Alice in Wonderland" autofocus required/>
+      <div id="source-chips" class="chips"></div>
+      <button type="submit">搜索</button>
+    </form>
+    <div id="search-meta" class="muted"></div>
+    <div id="search-results" class="cards"></div>
+  </section>
+
+  <!-- ============ 书架视图 ============ -->
+  <section id="view-shelf" class="view hidden">
+    <div class="shelf-head">
+      <h2>我的书架</h2>
+      <span id="shelf-lib" class="muted"></span>
+    </div>
+    <div id="shelf-empty" class="empty hidden">
+      <p>书架还空着——去 <a href="#" id="empty-go-search">搜索</a> 下载第一本书吧</p>
+    </div>
+    <div id="shelf-books" class="cards"></div>
+  </section>
+</main>
+
+<!-- ============ 阅读视图 ============ -->
+<section id="view-reader" class="hidden">
+  <header class="reader-top">
+    <button id="reader-back" class="ghost-btn">← 书架</button>
+    <span id="reader-title" class="reader-title"></span>
+    <span class="spacer"></span>
+    <button id="reader-aa" class="ghost-btn" title="字号">Aa</button>
+    <button id="reader-theme" class="ghost-btn" title="夜间">🌙</button>
+  </header>
+  <aside id="reader-toc" class="reader-toc hidden">
+    <ul id="toc-list"></ul>
+  </aside>
+  <div class="reader-main">
+    <button id="reader-toc-toggle" class="ghost-btn toc-btn" title="目录">☰</button>
+    <article id="reader-body" class="reader-body"></article>
+    <footer class="reader-nav">
+      <button id="reader-prev" class="outline">上一章</button>
+      <span id="reader-pos" class="muted"></span>
+      <button id="reader-next" class="outline">下一章</button>
+    </footer>
+  </div>
+</section>
+
+<!-- 下载任务 toast -->
+<div id="tasks" class="tasks hidden"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

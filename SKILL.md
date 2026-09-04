@@ -55,6 +55,11 @@ bookfetch get libgen <md5>                             # 二进制原文件（ep
 
 `--human` 给人看；默认 JSON（含 `errors` 字典——某源失败不影响其他源结果）。
 
+# 浏览器 UI（N2 serve）
+# GUI 只负责浏览；搜索/下载与 CLI 是同一套代码路径（fetch_cache + 渲染内核）。
+bookfetch serve                 # 打开 http://127.0.0.1:8756/（书库 ~/Books 自动建）
+bookfetch serve --no-browser --port 9000   # 不开浏览器/改端口（远程预览用）
+
 ## 源路由表
 
 | source | 内容 | id 形态 | 大陆直连 |

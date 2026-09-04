@@ -136,8 +136,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     gp.add_argument("--human", action="store_true", help="human-readable output")
 
+    sv = sub.add_parser("serve", help="run the N2 desktop Web UI (browser opens automatically)")
+    sv.add_argument("--port", type=int, default=8756, help="port (default 8756)")
+    sv.add_argument("--no-browser", action="store_true", help="do not auto-open a browser")
+
     args = p.parse_args(argv)
     try:
+        if args.cmd == "serve":
+            from .server import serve as _serve
+
+            _serve(args.port, open_browser=not args.no_browser)
+            return 0
+
         if args.cmd == "search":
             results, errors = search_all(args.query, args.source, args.limit)
             obj = {

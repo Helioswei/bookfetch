@@ -1,0 +1,119 @@
+/* bookfetch N2 UI — Pico 之上补充阅读排版与布局 */
+
+/* ---------- 布局 ---------- */
+body { display: flex; flex-direction: column; min-height: 100vh; }
+main { flex: 1; }
+.hidden { display: none !important; }
+.muted { color: var(--pico-muted-color); font-size: .85rem; }
+.topbar {
+  display: flex; align-items: center; gap: 1rem;
+  padding: .6rem 1rem; border-bottom: 1px solid var(--pico-muted-border-color, #ddd);
+}
+.brand { font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; gap: .4rem; }
+.logo { font-size: 1.2rem; }
+.tabs { display: flex; gap: .3rem; margin-left: 1rem; }
+.tab {
+  background: none; border: none; padding: .4rem .9rem; border-radius: 8px;
+  color: var(--pico-muted-color); font-size: .95rem; cursor: pointer;
+}
+.tab.active { background: var(--pico-primary); color: var(--pico-primary-inverse); }
+.ghost-btn {
+  background: none; border: 1px solid var(--pico-muted-border-color, #ccc);
+  border-radius: 8px; padding: .3rem .7rem; cursor: pointer; font-size: .9rem;
+}
+
+/* ---------- 搜索 ---------- */
+.search-row { display: flex; flex-direction: column; gap: .6rem; margin-top: 1rem; }
+.chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+.chip {
+  border: 1px solid var(--pico-muted-border-color, #ccc); background: none;
+  border-radius: 999px; padding: .15rem .7rem; font-size: .8rem; cursor: pointer;
+}
+.chip.on { background: var(--pico-primary); border-color: var(--pico-primary); color: var(--pico-primary-inverse); }
+#search-meta { margin: .5rem 0; }
+
+/* ---------- 卡片 ---------- */
+.cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .8rem;
+}
+.card {
+  border: 1px solid var(--pico-muted-border-color, #e0e0e0); border-radius: 10px;
+  padding: .9rem 1rem; display: flex; flex-direction: column; gap: .35rem;
+}
+.card h3 { margin: 0; font-size: 1.02rem; line-height: 1.4; }
+.card .sub { color: var(--pico-muted-color); font-size: .85rem; min-height: 1.2em; }
+.card .badges { display: flex; gap: .35rem; flex-wrap: wrap; margin-top: .1rem; }
+.badge {
+  font-size: .7rem; border-radius: 4px; padding: .1rem .45rem;
+  background: var(--pico-muted-border-color, #eee); color: var(--pico-muted-color);
+}
+.badge.warn { background: #fde8e8; color: #b3261e; }
+.card .actions { margin-top: auto; display: flex; gap: .5rem; }
+.card .actions button { margin: 0; padding: .25rem .8rem; font-size: .85rem; }
+
+/* ---------- 书架 ---------- */
+.shelf-head { display: flex; align-items: baseline; gap: 1rem; margin: 1rem 0 .5rem; }
+.shelf-head h2 { margin: 0; font-size: 1.2rem; }
+.book-card { cursor: pointer; }
+.book-card .fmt { margin-left: auto; }
+.empty { text-align: center; color: var(--pico-muted-color); padding: 3rem 0; }
+
+/* ---------- 阅读器 ---------- */
+#view-reader {
+  position: fixed; inset: 0; z-index: 20; background: var(--pico-background-color);
+  display: flex; flex-direction: column;
+}
+.reader-top {
+  display: flex; align-items: center; gap: .8rem; padding: .5rem 1rem;
+  border-bottom: 1px solid var(--pico-muted-border-color, #ddd);
+}
+.reader-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spacer { flex: 1; }
+.reader-main { flex: 1; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+.reader-toc {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 280px; overflow-y: auto;
+  background: var(--pico-card-background-color, #fff); border-right: 1px solid var(--pico-muted-border-color, #ddd);
+  z-index: 5; padding: .6rem;
+}
+#toc-list { list-style: none; margin: 0; padding: 0; }
+#toc-list li { padding: .3rem .5rem; border-radius: 6px; cursor: pointer; font-size: .88rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#toc-list li:hover { background: var(--pico-muted-border-color, #f0f0f0); }
+#toc-list li.cur { background: var(--pico-primary-focus, #e3ecf9); font-weight: 600; }
+.toc-btn { position: absolute; left: .8rem; top: .7rem; z-index: 4; }
+.reader-body {
+  flex: 1; overflow-y: auto; padding: 2.2rem max(1.2rem, calc(50vw - 22em)) 3rem;
+  font-family: "Songti SC", "Noto Serif SC", "Source Han Serif SC", Georgia, "Times New Roman", serif;
+  font-size: 19px; line-height: 1.9; letter-spacing: .01em;
+}
+.reader-body h1 { font-size: 1.45em; margin: .2em 0 1.2em; text-align: center; }
+.reader-body p { margin: 0 0 1.1em; text-align: justify; }
+.reader-body .chap-txt p:first-child::first-letter { /* 段首下沉克制，普通段落不用 */
+}
+.reader-nav { display: flex; align-items: center; justify-content: center; gap: 1.2rem; padding: .8rem; }
+.reader-nav button { margin: 0; width: 110px; }
+.reader-nav .muted { width: 160px; text-align: center; }
+body[data-reader-dark="1"] { --pico-background-color:#1c1c1e; }
+body[data-reader-dark="1"] #view-reader { background:#1c1c1e; color:#d5d3ce; }
+body[data-reader-dark="1"] .reader-body { color:#d5d3ce; }
+
+/* ---------- 下载任务 toast ---------- */
+.tasks {
+  position: fixed; right: 1rem; bottom: 1rem; width: 320px; z-index: 50;
+  display: flex; flex-direction: column; gap: .5rem;
+}
+.task {
+  background: var(--pico-card-background-color, #fff); border: 1px solid var(--pico-muted-border-color, #ddd);
+  border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,.12);
+  padding: .6rem .9rem; font-size: .85rem; display: flex; flex-direction: column; gap: .2rem;
+}
+.task .t-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task .t-msg { color: var(--pico-muted-color); font-size: .78rem; }
+.task .t-bar { height: 3px; border-radius: 2px; background: var(--pico-muted-border-color, #eee); overflow: hidden; }
+.task .t-bar i { display: block; height: 100%; width: 100%; background: var(--pico-primary);
+  animation: tslide 1.4s linear infinite; }
+@keyframes tslide { from { margin-left: -60%; } to { margin-left: 100%; } }
+.task.ok .t-bar i { animation: none; background: #2e9e5b; }
+.task.err .t-bar i { animation: none; background: #c0392b; }
+.task button.close { position: static; margin-left: auto; border: none; background: none; cursor: pointer; color: var(--pico-muted-color); }
+.task .t-row { display: flex; align-items: center; gap: .4rem; }
