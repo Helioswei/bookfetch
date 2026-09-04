@@ -137,6 +137,7 @@ a { color: var(--seal); }
   transition: border-color .12s, color .12s;
 }
 .ghost-btn:hover { border-color: var(--seal); color: var(--seal); }
+.ghost-btn.on { color: var(--seal); border-color: var(--seal); background: var(--seal-soft); }
 
 /* ---------- 搜索 ---------- */
 .search-row { display: flex; flex-direction: column; gap: .8rem; margin-top: 1.4rem; }
@@ -247,7 +248,7 @@ a { color: var(--seal); }
 }
 #toc-list li:hover { background: var(--paper-well); }
 #toc-list li.cur { background: var(--seal-soft); color: var(--seal); font-weight: 600; }
-.toc-btn { position: absolute; left: .9rem; top: .75rem; z-index: 4; }
+.toc-btn { position: absolute; left: .9rem; top: .75rem; z-index: 6; }  /* 高于 .reader-toc(5)：目录开着 ☰ 仍可点（收起） */
 .reader-body {
   flex: 1; overflow-y: auto;
   padding: 1.4rem max(1.3rem, calc(50vw - 24em)) 3rem;

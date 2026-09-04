@@ -74,6 +74,7 @@ const state = {
   pct: 0,                    // 0..1 scroll position
   fontIdx: 1,
   readerDark: false,
+  simp: false,               // 简体阅读态（2026-09-05）
 };
 
 const FONTS = [17, 19, 22, 25];
@@ -94,7 +95,7 @@ async function loadSources() {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'chip' + (on ? ' on' : '');
       b.dataset.name = name;
-      b.innerHTML = `<span class="cl">${esc(label)}</span>${name !== 'all' ? `<small>${esc(name)}</small>` : ''}`;
+      b.textContent = label;  // 纯中文 label，不带英文源名（2026-09-05 反馈）
       b.onclick = () => {
         chips.querySelectorAll('.chip').forEach((c) => c.classList.remove('on'));
         b.classList.add('on');
@@ -343,14 +344,18 @@ $('#shelf-books').addEventListener('click', (e) => {
 $('#empty-go-search').addEventListener('click', (e) => { e.preventDefault(); showView('search'); });
 
 /* ---------- 阅读器 ---------- */
+function renderToc(chapters) {
+  $('#toc-list').innerHTML = chapters.map((c) =>
+    `<li data-i="${c.i}" title="${esc(c.title)}">${esc(c.title)}</li>`).join('');
+}
 async function openReader(rel) {
   let ob;
   try { ob = await BF.api('open_book', { rel }); }
   catch (e) { alert('打开失败：' + e.message); return; }
-  state.book = ob; state.cur = 0;
+  state.book = ob; state.cur = 0; state.simp = false;
+  updateSimpBtn();
   $('#reader-title').textContent = ob.title;
-  $('#toc-list').innerHTML = ob.chapters.map((c) =>
-    `<li data-i="${c.i}" title="${esc(c.title)}">${esc(c.title)}</li>`).join('');
+  renderToc(ob.chapters);
   showView('reader');
   $('#reader-body').scrollTop = 0;
   try {
@@ -367,7 +372,7 @@ async function loadChapter() {
   const ob = state.book;
   if (!ob) return;
   let c;
-  try { c = await BF.api('chapter', { rel: ob.rel, idx: state.cur }); }
+  try { c = await BF.api('chapter', { rel: ob.rel, idx: state.cur, simp: state.simp }); }
   catch (e) { $('#reader-body').innerHTML = `<p>加载失败：${esc(e.message)}</p>`; return; }
   const paras = c.text.split(/\n{2,}|\n(?=\S)/).map((s) => s.trim()).filter(Boolean)
     .filter((s) => s !== c.title && s !== '《' + c.title + '》');
@@ -409,7 +414,14 @@ function goChapter(i) {
 $('#reader-body').addEventListener('scroll', () => saveProgressSoon());
 $('#reader-next').addEventListener('click', () => goChapter(state.cur + 1));
 $('#reader-prev').addEventListener('click', () => goChapter(state.cur - 1));
-$('#reader-back').addEventListener('click', () => { saveProgress(); state.book = null; loadShelf(); showView('shelf'); });
+function exitReader(view) {
+  saveProgress(); state.book = null;
+  $('#reader-toc').classList.add('hidden');           // 复位目录态
+  $('#reader-body').style.paddingLeft = '';
+  showView(view);
+}
+$('#reader-back').addEventListener('click', () => exitReader('shelf'));
+$('#reader-goto-search').addEventListener('click', () => exitReader('search'));
 $('#toc-list').addEventListener('click', (e) => {
   const li = e.target.closest('li[data-i]');
   if (li) goChapter(+li.dataset.i);
@@ -418,6 +430,27 @@ $('#reader-toc-toggle').addEventListener('click', () => {
   const toc = $('#reader-toc');
   toc.classList.toggle('hidden');
   $('#reader-body').style.paddingLeft = toc.classList.contains('hidden') ? '' : '300px';
+});
+
+/* 简繁切换：按钮标签 = 当前文本语言（繁 → 点击转简）；目录标题同切 */
+function updateSimpBtn() {
+  const b = $('#reader-simp');
+  b.textContent = state.simp ? '简' : '繁';
+  b.classList.toggle('on', state.simp);
+  b.title = state.simp ? '当前简体，点击转繁体' : '当前繁体，点击转简体';
+}
+$('#reader-simp').addEventListener('click', async () => {
+  if (!state.book) return;
+  state.simp = !state.simp;
+  updateSimpBtn();
+  const cur = state.cur;
+  try {
+    const ob = await BF.api('open_book', { rel: state.book.rel, simp: state.simp });
+    state.book.chapters = ob.chapters;
+    renderToc(ob.chapters);               // 目录标题随简繁
+  } catch (e) { alert('切换失败：' + e.message); state.simp = !state.simp; updateSimpBtn(); return; }
+  state.cur = Math.min(cur, ob.chapters.length - 1);
+  loadChapter();
 });
 
 /* 字号 + 夜间 */

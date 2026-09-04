@@ -3,12 +3,16 @@
 Text sources (a raw github txt, a ctext page) have no explicit chapter
 structure. Real public-domain classics mark sections with standalone title
 lines — most commonly 《書名》 wrappers (《論天干》《卷之三》), numbered 卷/章
-headers, and bare 序/跋/凡例 markers. ``split_headings`` finds those lines
-and returns ordered Chapter slices of the input; the original text is fully
-preserved (heading lines stay in the body; renderers skip the duplicate).
+headers, bare 序/跋/凡例 markers, and Chinese-numeral headers (一、天道).
+``split_headings`` finds those lines and returns ordered Chapter slices of
+the input; the original text is fully preserved (heading lines stay in the
+body; renderers skip the duplicate).
 
-Returns [] when no structural heading is found, so callers fall back to a
-single whole-text chapter — splitting must never destroy content.
+``split_rendered`` inverts the render step: bookfetch-written txt files carry
+``=== 标题 ===`` separator lines, so re-opening them restores exact chapters.
+
+Both return [] when no structure is found, so callers fall back to a single
+whole-text chapter — splitting must never destroy content.
 """
 
 from __future__ import annotations
@@ -29,7 +33,14 @@ _BARE = {
     "卷首", "序", "自序", "原序", "跋", "後記", "后记", "凡例",
     "目錄", "目录", "附錄", "附录", "補遺", "补遗", "題記", "题记",
 }
+# 4) Chinese-numeral section headers: 一、天道 / 三、十二地支 / 七、论生克 ——
+#    standalone lines starting with 一~百 + 、 and NO sentence punctuation in the
+#    title (real sentences end with 。；：etc.). Title cap 16 chars keeps prose
+#    like 「二、寅中火土长生…」 (long, punctuated) from matching.
+_SEQ_RE = re.compile(r"^[一二三四五六七八九十百〇零]{1,3}[、.．]\S[^，。；：！？!?“”\"'（）()]{0,15}$")
 _SENT_PUNCT = set("，。；：、！？!?；：,.;:")  # a real sentence never lacks these
+# 5) bookfetch's own rendered marker: === 章节标题 ===
+_MARK_RE = re.compile(r"^===\s*(.+?)\s*===$")
 
 
 def _heading(line: str) -> str | None:
@@ -41,9 +52,31 @@ def _heading(line: str) -> str | None:
         return m.group(1).strip()
     if _NUM_RE.match(s):
         return s
+    if _SEQ_RE.match(s):
+        return s
     if s in _BARE:
         return s
     return None
+
+
+def split_rendered(text: str) -> list[Chapter]:
+    """Re-split a bookfetch-rendered txt (=== 标题 === separators).
+
+    Exact inverse of the txt renderer: chapter titles and bodies round-trip.
+    Returns [] when no marker line exists (plain text → whole-text fallback).
+    """
+    lines = text.splitlines()
+    marks = [i for i, ln in enumerate(lines) if _MARK_RE.match(ln)]
+    if not marks:
+        return []
+    chapters: list[Chapter] = []
+    for k, i in enumerate(marks):
+        m = _MARK_RE.match(lines[i])
+        assert m  # marks 由 _MARK_RE 命中而来
+        title = m.group(1).strip()
+        end = marks[k + 1] if k + 1 < len(marks) else len(lines)
+        chapters.append(Chapter(title=title, text="\n".join(lines[i:end])))
+    return chapters
 
 
 def split_headings(lines: list[str]) -> list[Chapter]:

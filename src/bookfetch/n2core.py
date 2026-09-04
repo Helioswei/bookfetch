@@ -31,6 +31,8 @@ from .model import Book, Chapter, FetchResult
 from .sources import get_source, source_catalog, source_names
 from .util import CancelledError, FetchError, HumanVerificationError
 from .util.epub import build_epub
+from .util.simplify import to_simplified
+from .util.splitters import split_rendered
 
 logger = logging.getLogger("bookfetch")
 
@@ -378,32 +380,42 @@ def _open(path: Path) -> _OpenBook:
         ob = _OpenBook(chapters=_epub_chapters(path), format="epub")
     else:
         text = path.read_text(encoding="utf-8", errors="replace")
-        chapters = _ensure_chapters(
-            FetchResult(source="shelf", id=key, title=path.stem, content=text)
-        )
+        chapters = split_rendered(text)  # bookfetch 自产 === 分隔 txt 精确还原
+        if not chapters:
+            chapters = _ensure_chapters(
+                FetchResult(source="shelf", id=key, title=path.stem, content=text)
+            )
         ob = _OpenBook(chapters=chapters, format="txt")
     _OPEN_CACHE[key] = ob
     _OPEN_CACHE_META[key] = (st.st_mtime_ns, st.st_size)
     return ob
 
 
-def open_book(rel: str) -> dict:
-    """Chapter index for the reader: {title, format, chapters:[{i,title}]}."""
+def open_book(rel: str, simp: bool = False) -> dict:
+    """Chapter index for the reader: {title, format, chapters:[{i,title}]}.
+
+    simp=True 把章节标题转为简体（正文由 chapter API 转），目录随阅读器简繁切换。
+    """
     p = _resolve(rel)
     ob = _open(p)
+    titles = [c.title or f"第{i+1}部分" for i, c in enumerate(ob.chapters)]
+    if simp:
+        titles = [to_simplified(t) for t in titles]
     return {
         "rel": rel,
         "title": p.stem,
         "format": ob.format,
-        "chapters": [{"i": i, "title": c.title or f"第{i+1}部分"} for i, c in enumerate(ob.chapters)],
+        "chapters": [{"i": i, "title": t} for i, t in enumerate(titles)],
     }
 
 
-def chapter(rel: str, idx: int) -> dict:
+def chapter(rel: str, idx: int, simp: bool = False) -> dict:
     ob = _open(_resolve(rel))
     if idx < 0 or idx >= len(ob.chapters):
         raise ValueError(f"chapter index out of range: {idx}")
     c = ob.chapters[idx]
+    if simp:
+        return {"rel": rel, "i": idx, "title": to_simplified(c.title or ""), "text": to_simplified(c.text)}
     return {"rel": rel, "i": idx, "title": c.title, "text": c.text}
 
 
@@ -445,9 +457,9 @@ def api_call(name: str, params: dict) -> dict:
     if name == "shelf":
         return shelf()
     if name == "open_book":
-        return open_book(params.get("rel", ""))
+        return open_book(params.get("rel", ""), bool(params.get("simp", False)))
     if name == "chapter":
-        return chapter(params.get("rel", ""), int(params.get("idx", 0)))
+        return chapter(params.get("rel", ""), int(params.get("idx", 0)), bool(params.get("simp", False)))
     if name == "progress_get":
         return progress_get(params.get("rel", ""))
     if name == "progress_set":

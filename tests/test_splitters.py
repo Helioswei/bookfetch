@@ -48,3 +48,28 @@ def test_headings_kept_in_text_for_lossless_roundtrip():
     chs = split_headings(lines)
     assert _text(chs) == "\n".join(lines)
     assert chs[0].text.startswith("前言一句。\n《論日為主》")
+
+
+def test_chinese_numeral_section_headers():
+    # 滴天髓-style：一、天道 / 二、天干 —— 短无句读标题行
+    lines = ["導言一句。", "一、天道", "欲識三元萬法宗。", "二、天干", "甲木參天。", "三、地支", "子丑合土。"]
+    chs = split_headings(lines)
+    assert [c.title for c in chs] == ["一、天道", "二、天干", "三、地支"]
+    assert _text(chs) == "\n".join(lines)
+    assert chs[0].text.startswith("導言一句。\n一、天道")
+
+
+def test_numeral_prose_lines_never_split():
+    # 序号起头但长/带句读的正文行不是标题
+    lines = ["二、寅中火土長生，得際遇，經營發財。", "三、此命財旺身弱。", "任氏曰：一、二、三皆虛。"]
+    assert split_headings(lines) == []
+
+
+def test_split_rendered_roundtrip():
+    from bookfetch.util.splitters import split_rendered
+
+    text = "=== 卷一 ===\n正文一。\n\n=== 卷二 ===\n正文二。\n"
+    chs = split_rendered(text)
+    assert [c.title for c in chs] == ["卷一", "卷二"]
+    assert chs[1].text.startswith("=== 卷二 ===")
+    assert split_rendered("無標記的純文本。") == []

@@ -79,16 +79,17 @@ def _render_get(src, fr: FetchResult, args) -> FetchResult:
         text_chars = sum(len(c.text) for c in chapters)
         n_lines = sum(len(c.text.splitlines()) for c in chapters)
     else:  # txt
-        if args.split and len(chapters) > 1:
+        if len(chapters) > 1:
+            # 多章一律写入 === 标题 === 分隔：下载的 txt 自带目录定位（2026-09-05）
             parts = []
             for i, c in enumerate(chapters, 1):
                 head = c.title or f"第{i}部分"
                 parts.append(f"=== {head} ===\n{c.text}")
             text = "\n\n".join(parts) + "\n"
         elif args.simplify:
-            text = "\n".join(c.text for c in chapters) + "\n"
+            text = chapters[0].text  # 已转简（见上）
         else:
-            text = fr.content  # byte-identical to the fetched text
+            text = fr.content  # 单章/无结构：原文直通（byte-identical）
         path = out_dir / f"{fname}.txt"
         path.write_text(text, encoding="utf-8")
         text_chars = len(text)
@@ -127,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
     gp.add_argument(
         "--split",
         action="store_true",
-        help="insert '=== 章节 ===' separators into txt output (epub is always split)",
+        help="(历史兼容) 多章 txt 现默认写入 '=== 章节 ===' 分隔，此参数无需再传",
     )
     gp.add_argument(
         "--simplify",

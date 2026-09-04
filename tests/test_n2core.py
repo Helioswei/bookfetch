@@ -105,6 +105,18 @@ def test_proxy_settings_roundtrip(env):
     set_proxy("system")
 
 
+def test_reader_simp_conversion(env):
+    """open_book/chapter simp=True 输出简体（OpenCC，dev 组已装）。"""
+    rel = _write_book(env, "後漢書", [Chapter("卷一 帝紀", "後漢書曰：此見仁見智。")])
+    ob = n2core.open_book(rel, simp=True)
+    assert ob["chapters"][0]["title"] == "后汉书"  # 未分章时标题=文件名（已转简）
+    c = n2core.chapter(rel, 0, simp=True)
+    assert "后汉书曰：此见仁见智。" in c["text"] and "後漢書曰" not in c["text"]
+    # 不转时保持原文（繁体）
+    c2 = n2core.chapter(rel, 0)
+    assert "後漢書曰：此見仁見智。" in c2["text"]
+
+
 def test_progress_roundtrip(env):
     _write_book(env, "甲书", [Chapter("卷一", "内容一")])
     n2core.progress_set("甲书.txt", 3, pct=520)
