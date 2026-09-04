@@ -12,7 +12,7 @@ runs:
   using: composite
   steps:
     # 注意：调用方 workflow 必须先 actions/checkout（相对路径 composite 依赖仓库内容）
-    - uses: astral-sh/setup-uv@v10
+    - uses: astral-sh/setup-uv@v7
       with:
         python-version: "3.12"
 
