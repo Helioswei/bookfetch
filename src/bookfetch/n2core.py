@@ -375,16 +375,25 @@ _OPEN_CACHE: dict[str, _OpenBook] = {}
 _OPEN_CACHE_META: dict[str, tuple[int, int]] = {}
 
 
+def _chg(a: str, b: str) -> int:
+    """粗略字符差异数（含长度差）——基准检测只需比较 t2s/s2t 谁改得多。"""
+    return abs(len(a) - len(b)) + sum(1 for x, y in zip(a, b) if x != y)
+
+
 def _detect_base(ob: _OpenBook) -> str | None:
-    """Detect the text's baseline script: 'trad' if it contains characters a
-    t2s pass would change, else 'simp'. None when OpenCC is unavailable
-    (optional extra missing — reader hides the toggle instead of erroring).
-    """
+    """Detect the text's baseline script: 'simp'/'trad' by comparing how many
+    chars each direction changes. 双向投票：简体文本 s2t 改变量 ≫ t2s，
+    繁体反之。单向 t2s 探测会把简体周易误判为繁体——"乾"(qián) 是合法简体，
+    却会被 t2s 词典转"干"，造成 t2s 改动数虚高（2026-09-05 实测反馈：
+    点简/繁只有"乾→干"，正是 base 判错 + 乾 误转叠加）。
+    None when OpenCC is unavailable (optional extra missing)."""
     try:
         for c in ob.chapters[:2]:
             probe = (c.text or "")[:800]
             if probe.strip():
-                return "trad" if to_simplified(probe) != probe else "simp"
+                st = _chg(probe, to_simplified(probe))  # 繁→简 改动
+                ts = _chg(probe, to_traditional(probe))  # 简→繁 改动
+                return "simp" if ts >= st else "trad"
     except ValueError:
         pass
     return None

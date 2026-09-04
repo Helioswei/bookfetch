@@ -2,7 +2,30 @@
 
 from __future__ import annotations
 
+import re
+
 _INSTANCES: dict = {}  # tag -> OpenCC；type: ignore 由运行时 import 提供
+
+# 乾(qián) 专名保护：OpenCC t2s 词典把「乾」一律转「干」(gān 义)，但 乾坤/乾卦/乾元/
+# 乾下乾上/乾乾/乾为天 等 qián 语境是专名，切简后不应变（2026-09-05 周易实测：
+# '乾下乾上'→'干下干上'、'乾乾'→'干干'、《乾》→《干》）。
+# 实现：t2s 转换前把整词冻结成私用区占位符（OpenCC 不碰），转换后解冻还原——
+# 比输出后正则还原安全：不会误伤「乾乾淨淨」→"干干净净"这类真该简化的连续"干干"。
+_QIAN_WORDS = ("乾坤", "乾元", "乾卦", "乾下", "乾上", "乾为", "乾爲",
+               "乾阳", "乾陽", "乾龙", "乾龍", "乾纲", "乾宅", "终日乾乾", "乾隆")
+_QIAN_FREEZE = {w: chr(0xE000 + i) for i, w in enumerate(_QIAN_WORDS)}
+
+
+def _freeze_qian(s: str) -> str:
+    for w, ph in _QIAN_FREEZE.items():
+        s = s.replace(w, ph)
+    return s
+
+
+def _thaw_qian(s: str) -> str:
+    for w, ph in _QIAN_FREEZE.items():
+        s = s.replace(ph, w)
+    return s
 
 
 def _converter(tag: str):
@@ -26,7 +49,9 @@ def _converter(tag: str):
 
 def to_simplified(text: str) -> str:
     """Convert Traditional Chinese text to Simplified via OpenCC (t2s)."""
-    return _converter("t2s").convert(text)
+    out = _converter("t2s").convert(_freeze_qian(text))
+    out = _thaw_qian(out)
+    return out.replace("《干》", "《乾》")  # 单字卦名「《乾》」不在词表，输出后精确还原
 
 
 def to_traditional(text: str) -> str:

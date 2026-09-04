@@ -135,6 +135,23 @@ def test_reader_traditional_conversion_simplified_book(env):
     assert "渊海子平曰：此见仁见智。" in n2core.chapter(rel, 0)["text"]
 
 
+def test_reader_base_detect_zhouyi_simplified_book(env):
+    """简体周易（乾卦名 t2s 词典会转"干"）必须判 simp——旧单向 t2s 探测被
+    乾→干 虚高改动数误导判成 trad，导致切简实际执行 t2s、全章只有"乾→干"。
+    （2026-09-05 实测反馈：'点击繁切简，简切繁，只有乾这一个字变了'）"""
+    rel = _write_book(env, "周易", [
+        Chapter("上经 乾卦第一", "乾下乾上 《乾》：元，亨，利，贞。初九：潜龙勿用。九二：见龙在田，利见大人。九三：君子终日乾乾，夕惕若厉，无咎。大哉乾元，万物资始。"),
+    ])
+    ob = n2core.open_book(rel)
+    assert ob["base"] == "simp"
+    # 简体原文保持：t2s(切简)不动乾；s2t(切繁)正常出繁体且乾 仍为乾
+    c = n2core.chapter(rel, 0)
+    assert "乾下乾上" in c["text"] and "见龙在田" in c["text"]
+    c2 = n2core.chapter(rel, 0, simp=True)
+    assert "乾下乾上" in c2["text"] and "見龍在田" in c2["text"] and "乾" in c2["text"]
+    assert "干" not in c2["text"]  # qián 专名全保持，繁体态不应出现"干"
+
+
 def test_progress_roundtrip(env):
     _write_book(env, "甲书", [Chapter("卷一", "内容一")])
     n2core.progress_set("甲书.txt", 3, pct=520)
