@@ -44,6 +44,12 @@ bookfetch get ctext 727782 --out ~/books --human
 bookfetch get wikisource 吶喊 --format epub            # 整本 epub（自动展开目录→子页）
 bookfetch get ctext 727782 --simplify                  # 繁转简（需 [simp] extra）
 bookfetch get ctext 727782 --split                     # txt 插章节分隔
+bookfetch get gutenberg 11 --force                     # 缓存命中时强制重新抓取
+
+# 已下载去重（yt-dlp archive 模式，N1）
+# 同一 (source, id) 下过一次后，再次 get（任意格式 txt/epub）不再联网，
+# 直接从本地缓存重渲染；缓存目录 ~/.cache/bookfetch/fetched/，删了即重下。
+bookfetch get gutenberg 11 --format epub    # 若上面下过 txt，这次零网络
 bookfetch get libgen <md5>                             # 二进制原文件（epub/pdf）直存
 ```
 

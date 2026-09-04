@@ -150,7 +150,8 @@ uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 - [x] M6: Gutenberg 英文公版源（2026-09-04 完成，许可头尾自动剥离；E2E《Alice's Adventures in Wonderland》txt/epub 全通）
 - [x] M7: github 源多仓库化 + 搜索聚合（mymmsc/books + xiaopangxia 中医药 ~700 本；license 实测标注 + 404 死亡探活，2026-09-04 完成）
 - [x] M8: 中文网文/小说源 biquge（2026-09-04 完成：spike 探测 5 站 → biquge.tw 唯一活体全链路通 → 收录；README 版权红字免责；繁体 --simplify）
-- [ ] N1-N3（少爷 2026-09-04 提出，晚审后定）
+- [x] N1: 已下载去重（yt-dlp archive 模式，2026-09-04 完成：fetch 层缓存 source:id → 命中零网络重渲染；txt/epub 互认；--force 重下）
+- [ ] N2-N3（桌面阅读 GUI + 翻译，晚审后定）
 
 ## 许可
 

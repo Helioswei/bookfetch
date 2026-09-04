@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from . import fetch_cache
 from .model import Book, Chapter, FetchResult
 from .sources import get_source, search_all, source_names
 from .util import FetchError, sanitize_filename
@@ -29,7 +30,8 @@ def _human_search(obj: dict) -> None:
 
 def _human_get(obj: dict) -> None:
     r = obj["result"]
-    print(f"Saved: {r['out_path']}")
+    tag = "Cached, re-rendered: " if r.get("cached") else "Saved: "
+    print(f"{tag}{r['out_path']}")
     extra = f" | {len(r['chapters'])} chapters" if r.get("chapters") else ""
     print(f"  {r['title']} | {r['lines']} paragraphs | {r['chars']} chars | {r['format']}{extra}")
 
@@ -44,14 +46,13 @@ def _ensure_chapters(fr: FetchResult) -> list[Chapter]:
     return [Chapter(title=fr.title or fr.id, text=fr.content)]
 
 
-def _render_get(src, book: Book, args) -> FetchResult:
-    """Fetch -> optional simplify -> render txt/epub under --out.
+def _render_get(src, fr: FetchResult, args) -> FetchResult:
+    """Optional simplify -> render txt/epub under --out.
 
-    Binary sources (libgen etc.) return FetchResult.raw and are saved
-    byte-for-byte; text-only flags (--simplify/--split/--format) reject them.
+    `fr` is already fetched (network or cache). Binary sources (libgen etc.)
+    return FetchResult.raw and are saved byte-for-byte; text-only flags
+    (--simplify/--split/--format) reject them.
     """
-    fr = src.fetch(book)
-
     if fr.raw is not None:  # binary passthrough: save the original file
         if args.simplify or args.split or args.format != "txt":
             raise ValueError(f"源 {fr.source} 是二进制原文件（.{fr.format}），不支持 --simplify/--split/--format")
@@ -115,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     gp.add_argument("source", help="source name, e.g. ctext")
     gp.add_argument("id", help="edition id from search results")
     gp.add_argument("--title", default="", help="optional title override for the output filename")
+    gp.add_argument("--force", action="store_true", help="re-fetch even if this edition is already cached")
     gp.add_argument("--out", default=".", help="output directory (default: current dir)")
     gp.add_argument(
         "--format",
@@ -150,8 +152,18 @@ def main(argv: list[str] | None = None) -> int:
             if src is None:
                 raise ValueError(f"unknown source {args.source!r} (known: {', '.join(source_names())})")
             book = Book(source=args.source, id=args.id, title=args.title)
-            fr = _render_get(src, book, args)
-            obj = {"cmd": "get", "result": fr.to_dict()}
+            cached = False
+            fr = fetch_cache.load(args.source, args.id) if not args.force else None
+            if fr is None:
+                fr = src.fetch(book)
+                fetch_cache.save(args.source, args.id, fr)
+            else:
+                cached = True
+                fr.out_path = ""
+            fr = _render_get(src, fr, args)
+            d = fr.to_dict()
+            d["cached"] = cached
+            obj = {"cmd": "get", "result": d}
 
         if getattr(args, "human", False) and args.cmd == "search":
             _human_search(obj)
