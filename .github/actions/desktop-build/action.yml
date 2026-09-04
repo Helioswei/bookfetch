@@ -16,9 +16,9 @@ runs:
       with:
         python-version: "3.12"
 
-    - name: Install deps (gui + dev)
+    - name: Install deps (gui + dev + build)
       shell: bash
-      run: uv sync --extra gui --group dev
+      run: uv sync --extra gui --group dev --group build
 
     - name: Tests
       shell: bash

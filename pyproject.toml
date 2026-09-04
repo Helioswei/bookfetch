@@ -33,3 +33,4 @@ gui = ["pywebview>=5.0"]
 
 [dependency-groups]
 dev = ["pytest>=8.0", "opencc>=1.4"]
+build = ["pyinstaller>=6.0"]
