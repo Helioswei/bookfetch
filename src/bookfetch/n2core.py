@@ -14,6 +14,7 @@ client can never touch files outside the library.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -33,11 +34,15 @@ from .util import CancelledError, FetchError, HumanVerificationError
 from .util.epub import build_epub
 from .util.simplify import to_simplified, to_traditional
 from .util.splitters import split_rendered
+from .util.translator import has_latin, split_reader_paras
 
 logger = logging.getLogger("bookfetch")
 
 _CFG_DIR = Path(os.environ.get("BOOKFETCH_CONFIG", "~/.config/bookfetch")).expanduser()
 _PROGRESS = _CFG_DIR / "progress.json"
+_TR_CACHE_DIR = Path(
+    os.environ.get("BOOKFETCH_CACHE", "~/.cache/bookfetch")
+).expanduser() / "translations"
 _LOCK = threading.Lock()
 _TASKS: dict[str, _Job] = {}
 _TASK_ID = 0
@@ -453,8 +458,62 @@ def chapter(rel: str, idx: int, simp: bool = False) -> dict:
         raise ValueError(f"chapter index out of range: {idx}")
     c = ob.chapters[idx]
     if simp:
-        return {"rel": rel, "i": idx, "title": _conv(ob, c.title or ""), "text": _conv(ob, c.text)}
-    return {"rel": rel, "i": idx, "title": c.title, "text": c.text}
+        text = _conv(ob, c.text)
+        title = _conv(ob, c.title or "")
+    else:
+        text = c.text
+        title = c.title or ""
+    return {
+        "rel": rel,
+        "i": idx,
+        "title": title,
+        "text": text,
+        "hasLatin": has_latin(title + "\n" + text),  # N3：含英文才显示翻译钮
+    }
+
+
+def translate(rel: str, idx: int) -> dict:
+    """N3 英→中整章翻译：按阅读器切段规则对齐段落，逐段系统翻译，结果缓存。
+
+    返回 {trs: [译文|null...]}，长度 = 前端渲染段落数（正文去标题后）。
+    缓存 key = sha1(rel|idx|原文全文)——同一章重进/简繁同文不重翻。
+    非英文章 → trs=[]。桥缺失/语言包未装 → ValueError（中文引导文案）。
+    """
+    ob = _open(_resolve(rel))
+    if idx < 0 or idx >= len(ob.chapters):
+        raise ValueError(f"chapter index out of range: {idx}")
+    c = ob.chapters[idx]
+    title = c.title or ""
+    full = title + "\n" + c.text
+    if not has_latin(full):
+        return {"rel": rel, "i": idx, "trs": []}  # 非英文：前端按钮本就不显示，兜底
+    paras = split_reader_paras(c.text, title)
+    if not paras:
+        return {"rel": rel, "i": idx, "trs": []}
+
+    key = hashlib.sha1(f"{rel}|{idx}|{c.text}".encode("utf-8")).hexdigest()
+    cache_file = _TR_CACHE_DIR / f"{key}.json"
+    try:
+        if cache_file.exists():
+            trs = json.loads(cache_file.read_text(encoding="utf-8"))
+            if isinstance(trs, list) and len(trs) == len(paras):
+                return {"rel": rel, "i": idx, "trs": trs}
+    except Exception:
+        pass  # 缓存损坏 = miss 重翻
+
+    from .util.translator import translate_paragraphs
+
+    trs = translate_paragraphs(paras)
+    if len(trs) != len(paras):
+        raise ValueError("翻译段落数与原文不一致，请重试")
+    try:
+        _TR_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(
+            json.dumps(trs, ensure_ascii=False), encoding="utf-8"
+        )
+    except Exception:
+        pass  # 缓存写失败不影响本次返回
+    return {"rel": rel, "i": idx, "trs": trs}
 
 
 def _load_progress() -> dict:
@@ -498,6 +557,8 @@ def api_call(name: str, params: dict) -> dict:
         return open_book(params.get("rel", ""), bool(params.get("simp", False)))
     if name == "chapter":
         return chapter(params.get("rel", ""), int(params.get("idx", 0)), bool(params.get("simp", False)))
+    if name == "translate":
+        return translate(params.get("rel", ""), int(params.get("idx", 0)))
     if name == "progress_get":
         return progress_get(params.get("rel", ""))
     if name == "progress_set":
@@ -515,6 +576,6 @@ def api_call(name: str, params: dict) -> dict:
 
 BUILTIN_API = {
     "search", "download", "cancel", "task_status", "shelf", "open_book",
-    "chapter", "progress_get", "progress_set", "library", "sources",
+    "chapter", "translate", "progress_get", "progress_set", "library", "sources",
     "settings_get", "settings_set",
 }

@@ -7,6 +7,7 @@ import pytest
 from bookfetch import n2core, fetch_cache
 from bookfetch.model import Book, Chapter, FetchResult
 from bookfetch.util.epub import build_epub
+from bookfetch.util.translator import split_reader_paras
 
 
 @pytest.fixture()
@@ -259,3 +260,68 @@ def test_download_raw_passthrough(env, monkeypatch):
     assert st["status"] == "done", st
     assert st["out_rel"] == "PDF书.pdf"  # original extension kept
     assert (env / "Books" / "PDF书.pdf").read_bytes() == b"%PDF-1.4 fake bytes"
+
+
+# --------------------------------------------------------- translate (N3) ---
+
+def test_translate_chinese_book_no_bridge_call(env, monkeypatch):
+    """中文书 trs=[] 且绝不触翻译桥。"""
+    _write_book(env, "周易", [Chapter("乾卦", "乾下乾上。大哉乾元。")])
+    monkeypatch.setattr(n2core, "_TR_CACHE_DIR", env / "cfg" / "tr")
+
+    def boom(texts):
+        pytest.fail("中文书不应触发翻译桥")
+
+    monkeypatch.setattr("bookfetch.util.translator.translate_paragraphs", boom)
+    r = n2core.translate("周易.txt", 0)
+    assert r["trs"] == []
+
+
+def test_translate_english_chapter_caches(env, monkeypatch):
+    """英文章：译文对齐标题过滤后的段落；二次调用命中磁盘缓存不重翻。"""
+    text = ("One two three four five six seven eight nine ten eleven "
+            "twelve thirteen fourteen fifteen sixteen.")
+    _write_book(env, "EnBook", [Chapter("Ch1", text)])
+    monkeypatch.setattr(n2core, "_TR_CACHE_DIR", env / "cfg" / "tr")
+    calls = []
+
+    def fake(texts):
+        calls.append(list(texts))
+        return [f"译{i}" for i in range(len(texts))]
+
+    monkeypatch.setattr("bookfetch.util.translator.translate_paragraphs", fake)
+    r1 = n2core.translate("EnBook.txt", 0)
+    # txt 往返后 c.title=文件名、正文保留内部 "Ch1" 行 → 段落数以实际解析为准
+    ob = n2core._open(n2core._resolve("EnBook.txt"))
+    expect_n = len(split_reader_paras(ob.chapters[0].text, ob.chapters[0].title))
+    assert len(r1["trs"]) == expect_n
+    assert expect_n > 0
+    r2 = n2core.translate("EnBook.txt", 0)
+    assert r2["trs"] == r1["trs"]
+    assert len(calls) == 1                # 缓存命中，桥只调一次
+
+
+def test_translate_paragraph_count_mismatch_raises(env, monkeypatch):
+    _write_book(env, "EnBook", [
+        Chapter("Ch1", ("One two three four five six seven eight nine ten eleven "
+                        "twelve thirteen fourteen fifteen sixteen.\n\n"
+                        "Second para with enough words here to count too."))])
+    monkeypatch.setattr(n2core, "_TR_CACHE_DIR", env / "cfg" / "tr")
+    monkeypatch.setattr("bookfetch.util.translator.translate_paragraphs", lambda texts: [])
+    with pytest.raises(ValueError, match="段落数"):
+        n2core.translate("EnBook.txt", 0)
+
+
+def test_translate_out_of_range(env, monkeypatch):
+    _write_book(env, "EnBook", [Chapter("Ch1", "one two three four five six seven")])
+    with pytest.raises(ValueError):
+        n2core.translate("EnBook.txt", 5)
+
+
+def test_chapter_has_latin_flag(env):
+    rel = _write_book(env, "EnBook", [
+        Chapter("Ch1", "one two three four five six seven eight nine ten "
+                        "eleven twelve thirteen fourteen fifteen")])
+    assert n2core.chapter(rel, 0)["hasLatin"] is True
+    rel2 = _write_book(env, "中書", [Chapter("第一章", "汉字正文内容若干。")])
+    assert n2core.chapter(rel2, 0)["hasLatin"] is False

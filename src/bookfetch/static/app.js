@@ -76,6 +76,8 @@ const state = {
   readerDark: false,
   base: null,                // 文本基准简繁 'trad'|'simp'（open_book 返回）；null=无 OpenCC
   simp: false,               // 已切到与基准相反的语言（2026-09-05）
+  trOn: false,               // N3：当前章沉浸式译文中（原文+译文对照）
+  trs: null,                 // 当前章译文数组（对齐 p.para 序号）
 };
 
 const FONTS = [17, 19, 22, 25];
@@ -389,10 +391,15 @@ async function loadChapter() {
   let c;
   try { c = await BF.api('chapter', { rel: ob.rel, idx: state.cur, simp: state.simp }); }
   catch (e) { $('#reader-body').innerHTML = `<p>加载失败：${esc(e.message)}</p>`; return; }
+  _trSeq++;            // 切章使在途翻译请求失效
+  _trBusy = false;     // 复位翻译态（防旧章 busy 卡死按钮）
+  resetTrBtn();
   const paras = c.text.split(/\n{2,}|\n(?=\S)/).map((s) => s.trim()).filter(Boolean)
     .filter((s) => s !== c.title && s !== '《' + c.title + '》');
   $('#reader-body').innerHTML = `<h1>${esc(c.title)}</h1>` +
-    paras.map((p) => `<p>${esc(p)}</p>`).join('');
+    paras.map((p) => `<p class="para">${esc(p)}</p>`).join('');
+  state.trs = null; state.trOn = false;
+  updateTrBtn(!!c.hasLatin);   // N3：章节含英文才显示翻译钮
   document.querySelectorAll('#toc-list li').forEach((li) =>
     li.classList.toggle('cur', +li.dataset.i === state.cur));
   $('#reader-pos').textContent = `第 ${state.cur + 1} / ${ob.chapters.length} 章`;
@@ -405,6 +412,67 @@ async function loadChapter() {
   });
   saveProgressSoon();
 }
+
+/* N3 英译中：沉浸式对照（原文每段下插译文；按钮=当前态，on=对照中）。
+   渲染 p.para 与后端 split_reader_paras 同一套切段规则（对齐序号）。 */
+let _trBusy = false;      // 翻译请求在途（按钮 busy）
+let _trSeq = 0;           // 章代际：切章后旧响应丢弃
+function resetTrBtn() {
+  const b = $('#reader-tr');
+  b.textContent = '译';
+  b.classList.remove('on', 'busy');
+  b.disabled = false;
+  b.title = '翻译本章（英译中，沉浸对照）';
+}
+function updateTrBtn(hasLatin) {
+  const b = $('#reader-tr');
+  if (hasLatin) { b.classList.remove('hidden'); resetTrBtn(); }
+  else { b.classList.add('hidden'); b.classList.remove('on'); }
+}
+async function translateChapter() {
+  const ob = state.book, cur = state.cur;
+  if (!ob || _trBusy) return;
+  const b = $('#reader-tr');
+  const seq = ++_trSeq;
+  _trBusy = true;
+  b.textContent = '译中…'; b.classList.remove('on'); b.disabled = true;
+  try {
+    const r = await BF.api('translate', { rel: ob.rel, idx: cur });
+    if (seq !== _trSeq || !state.book || state.cur !== cur) return; // 已切章，丢弃
+    state.trs = r.trs || [];
+    state.trOn = true;
+    b.textContent = '译'; b.classList.add('on');
+    b.title = '对照中，点击恢复原文';
+    renderTrs();
+  } catch (e) {
+    if (seq !== _trSeq) return;
+    alert('翻译失败：' + (e.message || '系统翻译不可用'));
+  } finally {
+    if (seq === _trSeq) { _trBusy = false; b.disabled = false; b.classList.remove('busy'); }
+  }
+}
+function renderTrs() {
+  const paras = [...document.querySelectorAll('#reader-body p.para')];
+  if (!state.trs || paras.length !== state.trs.length) return; // 段数不符则放弃（保原文可读）
+  paras.forEach((p, i) => {
+    const t = state.trs[i];
+    if (!t) return;
+    const d = document.createElement('div');
+    d.className = 'reader-tr';
+    d.textContent = t;
+    p.after(d);
+  });
+}
+$('#reader-tr').addEventListener('click', () => {
+  if (!state.book) return;
+  if (state.trOn) {                 // 关对照回原文（不删译文缓存，重开不重翻）
+    state.trOn = false; state.trs = null;
+    document.querySelectorAll('#reader-body .reader-tr').forEach((n) => n.remove());
+    resetTrBtn();
+  } else {
+    translateChapter();
+  }
+});
 
 function saveProgress() {
   if (!state.book) return;
