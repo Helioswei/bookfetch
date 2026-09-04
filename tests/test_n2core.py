@@ -264,40 +264,51 @@ def test_download_raw_passthrough(env, monkeypatch):
 
 # --------------------------------------------------------- translate (N3) ---
 
-def test_translate_chinese_book_no_bridge_call(env, monkeypatch):
-    """中文书 trs=[] 且绝不触翻译桥。"""
-    _write_book(env, "周易", [Chapter("乾卦", "乾下乾上。大哉乾元。")])
+def test_translate_chinese_book_zh2en(env, monkeypatch):
+    """中文章：dir=zh2en、走桥、译文对齐切段。"""
+    _write_book(env, "周易", [Chapter("乾卦", "乾下乾上。\n\n大哉乾元，万物资始。")])
     monkeypatch.setattr(n2core, "_TR_CACHE_DIR", env / "cfg" / "tr")
+    seen = {}
 
-    def boom(texts):
-        pytest.fail("中文书不应触发翻译桥")
+    def fake(texts, direction="en2zh"):
+        seen["direction"] = direction
+        seen["texts"] = list(texts)
+        return [f"T{i}" for i in range(len(texts))]
 
-    monkeypatch.setattr("bookfetch.util.translator.translate_paragraphs", boom)
+    monkeypatch.setattr("bookfetch.n2core.translate_paragraphs", fake)
     r = n2core.translate("周易.txt", 0)
-    assert r["trs"] == []
+    assert r["dir"] == "zh2en"
+    assert seen["direction"] == "zh2en"
+    assert len(r["trs"]) == len(seen["texts"]) > 0
+    assert r["trs"][0] == "T0"
 
 
 def test_translate_english_chapter_caches(env, monkeypatch):
-    """英文章：译文对齐标题过滤后的段落；二次调用命中磁盘缓存不重翻。"""
+    """英文章：dir=en2zh；译文对齐标题过滤后的段落；二次调用命中磁盘缓存不重翻。"""
     text = ("One two three four five six seven eight nine ten eleven "
             "twelve thirteen fourteen fifteen sixteen.")
     _write_book(env, "EnBook", [Chapter("Ch1", text)])
     monkeypatch.setattr(n2core, "_TR_CACHE_DIR", env / "cfg" / "tr")
     calls = []
+    dirs = []
 
-    def fake(texts):
+    def fake(texts, direction="en2zh"):
         calls.append(list(texts))
+        dirs.append(direction)
         return [f"译{i}" for i in range(len(texts))]
 
-    monkeypatch.setattr("bookfetch.util.translator.translate_paragraphs", fake)
+    monkeypatch.setattr("bookfetch.n2core.translate_paragraphs", fake)
     r1 = n2core.translate("EnBook.txt", 0)
     # txt 往返后 c.title=文件名、正文保留内部 "Ch1" 行 → 段落数以实际解析为准
     ob = n2core._open(n2core._resolve("EnBook.txt"))
     expect_n = len(split_reader_paras(ob.chapters[0].text, ob.chapters[0].title))
+    assert r1["dir"] == "en2zh"
+    assert dirs == ["en2zh"]
     assert len(r1["trs"]) == expect_n
     assert expect_n > 0
     r2 = n2core.translate("EnBook.txt", 0)
     assert r2["trs"] == r1["trs"]
+    assert r2["dir"] == "en2zh"
     assert len(calls) == 1                # 缓存命中，桥只调一次
 
 
@@ -307,7 +318,9 @@ def test_translate_paragraph_count_mismatch_raises(env, monkeypatch):
                         "twelve thirteen fourteen fifteen sixteen.\n\n"
                         "Second para with enough words here to count too."))])
     monkeypatch.setattr(n2core, "_TR_CACHE_DIR", env / "cfg" / "tr")
-    monkeypatch.setattr("bookfetch.util.translator.translate_paragraphs", lambda texts: [])
+    monkeypatch.setattr(
+        "bookfetch.n2core.translate_paragraphs",
+        lambda texts, direction="en2zh": [])
     with pytest.raises(ValueError, match="段落数"):
         n2core.translate("EnBook.txt", 0)
 
@@ -318,13 +331,14 @@ def test_translate_out_of_range(env, monkeypatch):
         n2core.translate("EnBook.txt", 5)
 
 
-def test_chapter_has_latin_flag(env):
+def test_chapter_dir_flag(env):
+    """chapter() 返回 dir（方向唯一判定在后端）：英文章 en2zh、中文章 zh2en。"""
     rel = _write_book(env, "EnBook", [
         Chapter("Ch1", "one two three four five six seven eight nine ten "
                         "eleven twelve thirteen fourteen fifteen")])
-    assert n2core.chapter(rel, 0)["hasLatin"] is True
+    assert n2core.chapter(rel, 0)["dir"] == "en2zh"
     rel2 = _write_book(env, "中書", [Chapter("第一章", "汉字正文内容若干。")])
-    assert n2core.chapter(rel2, 0)["hasLatin"] is False
+    assert n2core.chapter(rel2, 0)["dir"] == "zh2en"
 
 
 def test_open_activator_launches(env, monkeypatch):

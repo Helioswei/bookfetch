@@ -1,7 +1,7 @@
-"""英→中翻译桥客户端（macOS 系统翻译，可选能力；N3）。
+"""翻译桥客户端（macOS 系统翻译，中英双向，可选能力；N3）。
 
-定位翻译桥二进制并批量调用：stdin JSON 段落数组 → stdout JSON 译文数组。
-桥 = packaging/translate_bridge.swift 编译产物（build_translator.sh）。
+定位翻译桥二进制并批量调用：stdin JSON 对象 {"paras": [...], "dir": "en2zh"|"zh2en"}
+→ stdout JSON 译文数组。桥 = packaging/translate_bridge.swift 编译产物（build_translator.sh）。
 非 macOS / 桥缺失 / 语言包未装 → translate_paragraphs 抛 ValueError（中文文案），
 调用方（n2core.translate API）透传给前端做引导提示。
 """
@@ -15,15 +15,32 @@ import subprocess
 import sys
 from pathlib import Path
 
+# src/bookfetch/util → 仓库根（测试与候选定位共用）
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
 # 与前端 app.js 阅读器渲染完全一致的段落切分：
 #   const paras = c.text.split(/\n{2,}|\n(?=\S)/).map(trim).filter(Boolean)
 #     .filter(s => s !== title && s !== '《'+title+'》')
 # 译文按此规则对齐到前端 <p> 序号。改这里必须同步 app.js（坑 29 铁律：渲染与还原对称）。
 _READER_SPLIT = re.compile(r"\n{2,}|\n(?=\S)")
 
-# "章节含英文才显示翻译钮"的判定：≥ 此数量 2+ 字母单词视为英文章
+# "章节主导语言决定翻译方向"的判定：≥ 此数量 2+ 字母单词视为英文章 → en2zh
 _LATIN_WORD_RE = re.compile(r"[A-Za-z]{2,}")
 _LATIN_THRESHOLD = 15
+
+# 翻译方向常量（与前端 dir 字段、桥 dir 参数一致）
+DIR_EN2ZH = "en2zh"
+DIR_ZH2EN = "zh2en"
+_DIRS = (DIR_EN2ZH, DIR_ZH2EN)
+
+
+def trans_direction(text: str) -> str:
+    """按章主导语言选翻译方向：含较多拉丁词 → 英译中；否则中译英。
+
+    方向判定只在此一处（后端权威，前端拿 chapter()/translate() 返回的 dir 字段，
+    不自算——坑 38 同规则铁律）。
+    """
+    return DIR_EN2ZH if has_latin(text) else DIR_ZH2EN
 
 
 def split_reader_paras(text: str, title: str = "") -> list[str]:
@@ -51,8 +68,7 @@ def _bridge_candidates() -> list[Path]:
         # 也兼容未剥离形态；Resources 真身在 _MEIPASS 的 symlink 后可见
         cands.append(Path(mei) / "bookfetch" / "translate_bridge")
         cands.append(Path(mei) / "translate_bridge")
-    repo = Path(__file__).resolve().parents[3]  # src/bookfetch/util → 仓库根
-    cands.append(repo / "packaging" / "build" / "translate_bridge")
+    cands.append(_REPO_ROOT / "packaging" / "build" / "translate_bridge")
     return cands
 
 
@@ -66,8 +82,7 @@ def _activator_candidates() -> list[Path]:
     if mei:
         cands.append(Path(mei) / "bookfetch" / "TranslationActivator.app")
         cands.append(Path(mei) / "TranslationActivator.app")
-    repo = Path(__file__).resolve().parents[3]
-    cands.append(repo / "packaging" / "activator" / "TranslationActivator.app")
+    cands.append(_REPO_ROOT / "packaging" / "activator" / "TranslationActivator.app")
     return cands
 
 
@@ -85,15 +100,23 @@ def _find_bridge() -> Path:
     raise ValueError("翻译桥不可用（需 macOS 26+ 且已构建 packaging/build/translate_bridge）")
 
 
-def translate_paragraphs(texts: list[str], timeout: float = 600.0) -> list[str | None]:
+def translate_paragraphs(
+    texts: list[str], direction: str = DIR_EN2ZH, timeout: float = 600.0
+) -> list[str | None]:
     """批量翻译段落（整章一次进程调用）。返回与输入等长的译文数组，单段失败为 None。
 
+    direction = "en2zh"（英→中）| "zh2en"（中→英），方向判定由 n2core 用
+    trans_direction 权威决定后传入（前端不参与）。
     非 macOS / 桥缺失 / 语言包未装 → ValueError（中文友好文案，前端直接展示）。
     """
     if not texts:
         return []
+    if direction not in _DIRS:
+        raise ValueError(f"翻译方向不支持：{direction}")
     bridge = _find_bridge()
-    payload = json.dumps(texts, ensure_ascii=False).encode("utf-8")
+    payload = json.dumps(
+        {"paras": texts, "dir": direction}, ensure_ascii=False
+    ).encode("utf-8")
     try:
         proc = subprocess.run(
             [str(bridge)], input=payload, capture_output=True, timeout=timeout

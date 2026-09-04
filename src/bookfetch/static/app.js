@@ -399,7 +399,7 @@ async function loadChapter() {
   $('#reader-body').innerHTML = `<h1>${esc(c.title)}</h1>` +
     paras.map((p) => `<p class="para">${esc(p)}</p>`).join('');
   state.trs = null; state.trOn = false;
-  updateTrBtn(!!c.hasLatin);   // N3：章节含英文才显示翻译钮
+  updateTrBtn(c.dir || 'en2zh');   // N3：方向后端权威（chapter() 返 dir），按钮全显示
   document.querySelectorAll('#toc-list li').forEach((li) =>
     li.classList.toggle('cur', +li.dataset.i === state.cur));
   $('#reader-pos').textContent = `第 ${state.cur + 1} / ${ob.chapters.length} 章`;
@@ -413,21 +413,26 @@ async function loadChapter() {
   saveProgressSoon();
 }
 
-/* N3 英译中：沉浸式对照（原文每段下插译文；按钮=当前态，on=对照中）。
+/* N3 双向翻译：沉浸式对照（原文每段下插译文；按钮=当前态，on=对照中）。
+   方向由后端 trans_direction 权威判定（chapter()/translate() 返 dir），前端不自算；
    渲染 p.para 与后端 split_reader_paras 同一套切段规则（对齐序号）。 */
+const TR_DIR_HINT = { en2zh: '英译中', zh2en: '中译英' };
 let _trBusy = false;      // 翻译请求在途（按钮 busy）
 let _trSeq = 0;           // 章代际：切章后旧响应丢弃
 function resetTrBtn() {
   const b = $('#reader-tr');
   b.textContent = '译';
   b.classList.remove('on', 'busy');
+  b.classList.remove('hidden');   // 双向后全书各章都提供翻译
   b.disabled = false;
-  b.title = '翻译本章（英译中，沉浸对照）';
+  b.title = '翻译本章（沉浸对照，方向自动）';
 }
-function updateTrBtn(hasLatin) {
+function updateTrBtn(dir) {
   const b = $('#reader-tr');
-  if (hasLatin) { b.classList.remove('hidden'); resetTrBtn(); }
-  else { b.classList.add('hidden'); b.classList.remove('on'); }
+  b.classList.remove('hidden');
+  resetTrBtn();
+  const d = TR_DIR_HINT[dir] || '自动';
+  b.title = `翻译本章（${d}，沉浸对照）`;
 }
 async function translateChapter() {
   const ob = state.book, cur = state.cur;
@@ -442,14 +447,15 @@ async function translateChapter() {
     state.trs = r.trs || [];
     state.trOn = true;
     b.textContent = '译'; b.classList.add('on');
-    b.title = '对照中，点击恢复原文';
+    const d = TR_DIR_HINT[r.dir] || '';
+    b.title = `对照中（${d}），点击恢复原文`;
     renderTrs();
   } catch (e) {
     if (seq !== _trSeq) return;
     const msg = e.message || '系统翻译不可用';
     if (msg.includes('翻译语言包')) {
       // N3 首次引导：语言包未装 → 拉起 SwiftUI 准备器（pywebview 会话无下载权限）
-      const ok = confirm('英译中需要 macOS 系统翻译语言包（首次一次性下载约 1GB，之后完全离线）。\n\n点「确定」打开「翻译语言包准备器」完成首次安装；装好后回到这里再点「译」即可。');
+      const ok = confirm('翻译需要 macOS 系统翻译语言包（中英双向，首次一次性下载约 1GB，之后完全离线）。\n\n点「确定」打开「翻译语言包准备器」完成首次安装；装好后回到这里再点「译」即可。');
       if (ok) {
         try { await BF.api('open_activator', {}); }
         catch (e2) { alert('打开准备器失败：' + (e2.message || '')); }

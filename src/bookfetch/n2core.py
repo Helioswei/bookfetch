@@ -35,7 +35,11 @@ from .util import CancelledError, FetchError, HumanVerificationError
 from .util.epub import build_epub
 from .util.simplify import to_simplified, to_traditional
 from .util.splitters import split_rendered
-from .util.translator import has_latin, split_reader_paras
+from .util.translator import (
+    split_reader_paras,
+    trans_direction,
+    translate_paragraphs,
+)
 
 logger = logging.getLogger("bookfetch")
 
@@ -464,47 +468,47 @@ def chapter(rel: str, idx: int, simp: bool = False) -> dict:
     else:
         text = c.text
         title = c.title or ""
+    full = title + "\n" + text
     return {
         "rel": rel,
         "i": idx,
         "title": title,
         "text": text,
-        "hasLatin": has_latin(title + "\n" + text),  # N3：含英文才显示翻译钮
+        "dir": trans_direction(full),  # N3 双向：方向唯一判定在此（前端不自算）
     }
 
 
 def translate(rel: str, idx: int) -> dict:
-    """N3 英→中整章翻译：按阅读器切段规则对齐段落，逐段系统翻译，结果缓存。
+    """N3 双向整章翻译：按阅读器切段规则对齐段落，逐段系统翻译，结果缓存。
 
-    返回 {trs: [译文|null...]}，长度 = 前端渲染段落数（正文去标题后）。
-    缓存 key = sha1(rel|idx|原文全文)——同一章重进/简繁同文不重翻。
-    非英文章 → trs=[]。桥缺失/语言包未装 → ValueError（中文引导文案）。
+    方向 = trans_direction(章全文)（含较多拉丁词 → en2zh，否则 zh2en）；
+    返回 {dir, trs: [译文|null...]}，trs 长度 = 前端渲染段落数（正文去标题后）。
+    缓存 key = sha1(rel|idx|direction|原文全文)——方向与文本共同决定缓存。
+    桥缺失/语言包未装 → ValueError（中文引导文案）。
     """
     ob = _open(_resolve(rel))
     if idx < 0 or idx >= len(ob.chapters):
         raise ValueError(f"chapter index out of range: {idx}")
     c = ob.chapters[idx]
     title = c.title or ""
-    full = title + "\n" + c.text
-    if not has_latin(full):
-        return {"rel": rel, "i": idx, "trs": []}  # 非英文：前端按钮本就不显示，兜底
+    direction = trans_direction(title + "\n" + c.text)
     paras = split_reader_paras(c.text, title)
     if not paras:
-        return {"rel": rel, "i": idx, "trs": []}
+        return {"rel": rel, "i": idx, "dir": direction, "trs": []}
 
-    key = hashlib.sha1(f"{rel}|{idx}|{c.text}".encode("utf-8")).hexdigest()
+    key = hashlib.sha1(
+        f"{rel}|{idx}|{direction}|{c.text}".encode("utf-8")
+    ).hexdigest()
     cache_file = _TR_CACHE_DIR / f"{key}.json"
     try:
         if cache_file.exists():
             trs = json.loads(cache_file.read_text(encoding="utf-8"))
             if isinstance(trs, list) and len(trs) == len(paras):
-                return {"rel": rel, "i": idx, "trs": trs}
+                return {"rel": rel, "i": idx, "dir": direction, "trs": trs}
     except Exception:
         pass  # 缓存损坏 = miss 重翻
 
-    from .util.translator import translate_paragraphs
-
-    trs = translate_paragraphs(paras)
+    trs = translate_paragraphs(paras, direction=direction)
     if len(trs) != len(paras):
         raise ValueError("翻译段落数与原文不一致，请重试")
     try:
@@ -514,7 +518,7 @@ def translate(rel: str, idx: int) -> dict:
         )
     except Exception:
         pass  # 缓存写失败不影响本次返回
-    return {"rel": rel, "i": idx, "trs": trs}
+    return {"rel": rel, "i": idx, "dir": direction, "trs": trs}
 
 
 def open_activator() -> dict:

@@ -1,7 +1,8 @@
-// bookfetch 翻译桥：macOS 系统翻译（Translation framework）
+// bookfetch 翻译桥：macOS 系统翻译（Translation framework），中英双向
 //
-// 协议：stdin 读 JSON 字符串数组（待译段落）→ stdout 写 JSON 数组（译文；
-// 单段失败对应 null）。异常输出 {"error": "..."}，退出码非 0。
+// 协议：stdin 读 JSON 对象 {"paras": ["段1", ...], "dir": "en2zh"|"zh2en"}
+// → stdout 写 JSON 译文数组（单段失败对应 null）。dir 缺省 "en2zh"（兼容旧调用）。
+// 异常输出 {"error": "...", "message": "中文文案"}，退出码非 0。
 //
 // 编译：packaging/build_translator.sh（要求 macOS 26+，installedSource init 26.0+）
 import Foundation
@@ -16,25 +17,37 @@ func errOut(_ code: String, _ msg: String) -> Never {
 @main
 struct TranslateBridge {
     static func main() async {
-        // 1. 读 stdin（整段 JSON 数组）
+        // 1. 读 stdin（JSON 对象：paras + dir）
         let data: Data
         do {
             data = try FileHandle.standardInput.readToEnd() ?? Data()
         } catch {
             errOut("read", "读取输入失败：\(error)")
         }
-        guard let arr = try? JSONSerialization.jsonObject(with: data) as? [String] else {
-            errOut("badInput", "stdin 需为 JSON 字符串数组")
+        guard
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let arr = obj["paras"] as? [String]
+        else {
+            errOut("badInput", "stdin 需为 JSON 对象 {\"paras\": [字符串数组], \"dir\": \"en2zh\"|\"zh2en\"}")
         }
         if arr.isEmpty {
             print("[]")
             return
         }
+        let dir = (obj["dir"] as? String) ?? "en2zh"
+        if dir != "en2zh" && dir != "zh2en" {
+            errOut("badInput", "dir 仅支持 en2zh / zh2en")
+        }
 
-        // 2. 会话（en → zh-Hans；installedSource 要求语言包已装）
+        // 2. 会话（方向决定 source/target；installedSource 要求源语言包已装）
         let en = Locale.Language(identifier: "en")
         let zh = Locale.Language(identifier: "zh-Hans")
-        let session = TranslationSession(installedSource: en, target: zh)
+        let session: TranslationSession
+        if dir == "zh2en" {
+            session = TranslationSession(installedSource: zh, target: en)
+        } else {
+            session = TranslationSession(installedSource: en, target: zh)
+        }
         if await !session.isReady {
             // 有 UI 的宿主进程（.app）里 canRequestDownloads=true 时可自动触发下载
             if session.canRequestDownloads {
@@ -45,7 +58,7 @@ struct TranslateBridge {
                 }
             } else {
                 errOut("notInstalled",
-                       "翻译语言包未安装：请在 bookfetch 中打开「翻译语言包准备器」完成首次安装（约 1GB），或在系统设置 → 通用 → 语言与地区 → 翻译中下载简体中文")
+                       "翻译语言包未安装：请在 bookfetch 中打开「翻译语言包准备器」完成首次安装（约 1GB），或在系统设置 → 通用 → 语言与地区 → 翻译中下载「简体中文」")
             }
         }
         if await !session.isReady {
