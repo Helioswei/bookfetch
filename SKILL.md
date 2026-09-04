@@ -60,6 +60,12 @@ bookfetch get libgen <md5>                             # 二进制原文件（ep
 bookfetch serve                 # 打开 http://127.0.0.1:8756/（书库 ~/Books 自动建）
 bookfetch serve --no-browser --port 9000   # 不开浏览器/改端口（远程预览用）
 
+# 桌面 App（N2 gui，需 gui extra）
+# pywebview 壳指向内嵌 localhost HTTP（不用 file://——WebKit 禁 file 页 fetch，
+# pywebview js_api 桥在 macOS 6.x file:// 下不注入；统一 http 通道最稳）。
+uv sync --extra gui              # 首次需装 gui 依赖
+bookfetch gui                    # 桌面窗口（书库 ~/Books）
+
 ## 源路由表
 
 | source | 内容 | id 形态 | 大陆直连 |

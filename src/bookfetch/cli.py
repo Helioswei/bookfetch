@@ -140,6 +140,9 @@ def main(argv: list[str] | None = None) -> int:
     sv.add_argument("--port", type=int, default=8756, help="port (default 8756)")
     sv.add_argument("--no-browser", action="store_true", help="do not auto-open a browser")
 
+    gu = sub.add_parser("gui", help="desktop App — pywebview shell over the same UI")
+    gu.add_argument("--debug", action="store_true", help="open WebView devtools")
+
     args = p.parse_args(argv)
     try:
         if args.cmd == "serve":
@@ -147,6 +150,11 @@ def main(argv: list[str] | None = None) -> int:
 
             _serve(args.port, open_browser=not args.no_browser)
             return 0
+
+        if args.cmd == "gui":
+            from .gui_app import run as _gui_run
+
+            return _gui_run(debug=args.debug)
 
         if args.cmd == "search":
             results, errors = search_all(args.query, args.source, args.limit)

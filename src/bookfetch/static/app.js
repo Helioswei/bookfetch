@@ -2,7 +2,12 @@
 
 /* ---------- backend adapter: fetch(HTTP) or pywebview(js_api) ---------- */
 const BF = (() => {
-  const inPyWebView = !!(window.pywebview && window.pywebview.api);
+  // pywebview injects a skeleton (window.pywebview.api = {}) at documentStart;
+  // the real api_call lands in finish.js after page load (→ 'pywebviewready').
+  // So readiness = api.api_call being a function — the skeleton {} must not
+  // count. Channel is chosen per call; boot() waits before first use.
+  const pvReady = () => !!(window.pywebview
+    && typeof window.pywebview.api.api_call === 'function');
   async function http(name, params) {
     const r = await fetch('/api/' + name, {
       method: 'POST',
@@ -13,13 +18,34 @@ const BF = (() => {
     if (j.error) throw new Error(j.error);
     return j;
   }
+  // pywebview transport: JSON-string protocol both ways (its per-annotation type
+  // conversion chokes on nested null/array params).
+  async function pv(name, params) {
+    const raw = await window.pywebview.api.api_call(name, JSON.stringify(params || {}));
+    const j = JSON.parse(raw);
+    if (j.error) throw new Error(j.error);
+    return j;
+  }
   return {
-    inPyWebView,
-    api: inPyWebView
-      ? (name, params) => window.pywebview.api.api_call(name, params || {})
-      : http,
+    get inPyWebView() { return pvReady(); },
+    api: (name, params) => (pvReady() ? pv(name, params) : http(name, params)),
   };
 })();
+
+// Wait until the backend bridge is reachable (see BF above for the injection
+// race) or give up after a window — plain browser mode returns immediately.
+async function waitBackend(timeoutMs = 15000) {
+  const pvReady = () => !!(window.pywebview
+    && typeof window.pywebview.api.api_call === 'function');
+  if (!window.pywebview || pvReady()) return;
+  await new Promise((resolve) => {
+    const to = setTimeout(resolve, timeoutMs); // hard cap: degrade to http
+    window.addEventListener('pywebviewready', () => { clearTimeout(to); resolve(); }, { once: true });
+    const iv = setInterval(() => { // fallback if the event fired before we listened
+      if (pvReady()) { clearInterval(iv); clearTimeout(to); resolve(); }
+    }, 150);
+  });
+}
 
 /* ---------- utils ---------- */
 const $ = (s) => document.querySelector(s);
@@ -300,6 +326,7 @@ window.addEventListener('beforeunload', () => saveProgress());
 
 /* ---------- boot ---------- */
 (async () => {
+  await waitBackend(); // pywebview bridge may still be injecting (harmless on http)
   try { $('#shelf-lib').textContent = (await BF.api('library', {})).library; } catch {}
   try {
     const f = localStorage.getItem('bf-font'); if (f) state.fontIdx = +f;

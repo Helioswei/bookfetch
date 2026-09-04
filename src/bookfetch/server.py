@@ -79,12 +79,13 @@ class _Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path in ("/", "/index.html"):
             self._static_file("index.html")
-        elif path.startswith("/static/"):
-            self._static_file(path.removeprefix("/static/"))
         elif path.startswith("/api/"):
             self._api(path.removeprefix("/api/"))
         else:
-            self.send_error(404)
+            # document-root mode: index.html references assets relatively
+            # (vendor/…, style.css, app.js) so the same page also loads over
+            # file:// inside the pywebview shell — serve them from _STATIC.
+            self._static_file(path.removeprefix("/"))
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path.startswith("/api/"):
