@@ -259,6 +259,7 @@ a { color: var(--seal); }
   padding: 1.4rem max(1.3rem, calc(50vw - 24em)) 3rem;
   font-family: var(--serif); font-size: 19px; line-height: 1.95; letter-spacing: .015em;
   color: var(--ink); text-align: justify;
+  background: var(--paper-card); /* 盖 Pico article 默认背景（--pico-card-background-color 不随 reader dark 翻转） */
 }
 .reader-body h1 { font-size: 1.5em; margin: .2em 0 1.4em; text-align: center; font-weight: 600; }
 .reader-body p { margin: 0 0 1.15em; text-indent: 2em; }
