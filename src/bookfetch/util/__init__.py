@@ -21,9 +21,41 @@ class FetchError(Exception):
     """Raised when a source page cannot be fetched after retries."""
 
 
+class HumanVerificationError(FetchError):
+    """The source answered with an anti-bot / human-verification page
+    (Cloudflare challenge, ctext-style CAPTCHA, …). Raised instead of a
+    silent empty parse so failures are never quiet (D1 addendum)."""
+
+
 class CancelledError(Exception):
     """Raised inside a source fetch loop when the user cancelled the job
     (checked cooperatively at chapter boundaries via the on_progress hook)."""
+
+
+# Anti-bot markers seen in the wild (lowercased, matched against the head of
+# the page).  ctext: "Please confirm that you are human! 敬請輸入認證圖案";
+# Cloudflare: "Just a moment...", cf-challenge, challenge-platform.
+_CHALLENGE_MARKS = (
+    "please confirm that you are human",
+    "just a moment",
+    "cf-challenge",
+    "challenge-platform",
+    "checking your browser",
+    "attention required",
+    "認證圖案",
+    "验证图案",
+    "verify you are human",
+)
+
+
+def looks_like_challenge(text: str) -> bool:
+    """True if the page looks like an anti-bot verification page.
+
+    Checked only on the head (challenge pages are small) with distinctive
+    markers, so normal book text / small pages are never misclassified.
+    """
+    head = text[:8192].lower()
+    return any(m in head for m in _CHALLENGE_MARKS)
 
 
 def _pace(host: str) -> None:
@@ -36,8 +68,15 @@ def _pace(host: str) -> None:
 
 
 def fetch(url: str, *, timeout: float = 30.0, retries: int = _max_retries) -> str:
-    """GET a URL and return decoded text. Retries with backoff on failure."""
-    return decode_bytes(fetch_bytes(url, timeout=timeout, retries=retries))
+    """GET a URL and return decoded text. Retries with backoff on failure.
+
+    A 200 human-verification page (ctext CAPTCHA, Cloudflare interstitial)
+    raises HumanVerificationError instead of silently parsing to nothing.
+    """
+    text = decode_bytes(fetch_bytes(url, timeout=timeout, retries=retries))
+    if looks_like_challenge(text):
+        raise HumanVerificationError(f"GET {url} 返回人机验证页（源站反爬拦截）")
+    return text
 
 
 def fetch_bytes(url: str, *, timeout: float = 30.0, retries: int = _max_retries) -> bytes:
@@ -58,6 +97,12 @@ def fetch_bytes(url: str, *, timeout: float = 30.0, retries: int = _max_retries)
                 return resp.read()
         except urllib.error.HTTPError as e:
             last_err = e
+            if e.code == 403 and looks_like_challenge(
+                decode_bytes(e.read(65536))
+            ):
+                # Cloudflare "Just a moment..." style block: retrying is
+                # pointless (same exit IP → same challenge). Report clearly.
+                raise HumanVerificationError(f"GET {url} 被源站人机验证拦截（HTTP 403）")
             if e.code == 429:
                 wait = 10.0
                 try:

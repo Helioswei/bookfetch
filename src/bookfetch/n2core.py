@@ -29,7 +29,7 @@ from . import fetch_cache
 from .cli import _ensure_chapters, _render_get
 from .model import Book, Chapter, FetchResult
 from .sources import get_source, source_catalog, source_names
-from .util import CancelledError, FetchError
+from .util import CancelledError, FetchError, HumanVerificationError
 from .util.epub import build_epub
 
 logger = logging.getLogger("bookfetch")
@@ -52,6 +52,8 @@ def friendly(exc: BaseException) -> str:
     Full technical detail goes to the log file (logging_setup) — end users and
     the search-meta line get this friendly line instead (D1 decision 3).
     """
+    if isinstance(exc, HumanVerificationError):
+        return "源站要求人机验证（反爬拦截）——当前网络出口被源站标记；换个网络或代理节点后重试"
     if isinstance(exc, FetchError):
         return "网络请求失败（已自动重试仍不通）——请检查网络或稍后重试"
     if isinstance(exc, (UnicodeEncodeError, UnicodeDecodeError, ValueError, json.JSONDecodeError)):
