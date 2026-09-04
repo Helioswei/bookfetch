@@ -151,8 +151,10 @@ a { color: var(--seal); }
 .chip {
   border: 1px solid #cfc3ab; background: var(--paper-card); color: var(--ink-2);
   border-radius: 999px; padding: .18rem .8rem; font-size: .8rem; cursor: pointer;
-  transition: all .12s;
+  transition: all .12s; display: inline-flex; align-items: baseline; gap: .32rem;
 }
+.chip small { font-size: .6rem; opacity: .65; letter-spacing: 0; }
+.chip.on small { opacity: .85; }
 .chip:hover { border-color: var(--seal); color: var(--seal); }
 .chip.on { background: var(--seal); border-color: var(--seal); color: #f6f1e7; }
 .search-row > button[type="submit"] {
@@ -267,29 +269,59 @@ body[data-reader-dark="1"] {
   --seal: #c0523f; --seal-deep: #d46450; --seal-soft: rgba(192,82,63,.2);
 }
 
-/* ---------- 下载任务 toast ---------- */
+/* ---------- 下载任务面板（右下角） ---------- */
 .tasks {
-  position: fixed; right: 1.2rem; bottom: 1.2rem; width: 320px; z-index: 50;
-  display: flex; flex-direction: column; gap: .5rem;
+  position: fixed; right: 1.2rem; bottom: 1.2rem; width: 340px; z-index: 50;
+  background: var(--paper-card); border: 1px solid var(--line-2); border-radius: 12px;
+  box-shadow: 0 8px 28px -10px rgba(40,30,10,.4);
+  overflow: hidden;
 }
+.tasks-head {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .45rem .8rem; border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(166,59,46,.06), transparent);
+}
+.tasks-title { font-size: .82rem; font-weight: 600; color: var(--ink-2); letter-spacing: .06em; }
+.tasks-toggle {
+  margin-left: auto; border: none; background: none; cursor: pointer;
+  color: var(--ink-3); font-size: .85rem; padding: 0 .3rem; line-height: 1;
+}
+.tasks-toggle:hover { color: var(--seal); }
+.badge-count {
+  font-style: normal; font-size: .7rem; color: #fff; background: var(--seal);
+  border-radius: 999px; padding: .05rem .5rem;
+}
+.tasks-list { display: flex; flex-direction: column; gap: .4rem; padding: .55rem .65rem; max-height: 46vh; overflow-y: auto; }
+.tasks.collapsed .tasks-list { display: none; }
+
 .task {
-  background: var(--paper-card); border: 1px solid var(--line-2); border-radius: 10px;
-  box-shadow: 0 6px 20px -8px rgba(40,30,10,.35);
-  padding: .6rem .95rem; font-size: .85rem; display: flex; flex-direction: column; gap: .25rem;
+  background: var(--paper-well); border: 1px solid var(--line); border-radius: 9px;
+  padding: .5rem .7rem; font-size: .82rem; display: flex; flex-direction: column; gap: .3rem;
 }
 .task .t-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
-.task .t-msg { color: var(--ink-3); font-size: .78rem; }
-.task .t-msg a { color: var(--seal); }
-.task .t-bar { height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
-.task .t-bar i { display: block; height: 100%; width: 100%; background: var(--seal); animation: tslide 1.4s linear infinite; }
-@keyframes tslide { from { margin-left: -60%; } to { margin-left: 100%; } }
-.task.ok .t-bar i { animation: none; background: var(--ok); }
-.task.err .t-bar i { animation: none; background: var(--err); }
-.task button.close {
-  position: static; margin-left: auto; border: none; background: none;
-  cursor: pointer; color: var(--ink-3); font-size: .8rem; padding: 0 .2rem;
+.task .t-fmt {
+  flex: none; font-size: .66rem; color: var(--ink-3); border: 1px solid var(--line);
+  border-radius: 4px; padding: 0 .3rem; align-self: center;
 }
-.task .t-row { display: flex; align-items: center; gap: .4rem; }
+.task .t-msg { color: var(--ink-3); font-size: .76rem; }
+.task .t-row { display: flex; align-items: center; gap: .45rem; min-width: 0; }
+.task .t-bar { height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.task .t-bar i { display: block; height: 100%; background: var(--seal); transition: width .4s; }
+.task .t-bar.idle i { width: 40% !important; animation: tslide 1.3s linear infinite; }
+@keyframes tslide { from { margin-left: -40%; } to { margin-left: 100%; } }
+.task .t-ops { display: flex; gap: .4rem; align-items: center; }
+.task .t-ops .mini {
+  border: 1px solid var(--line-2); background: transparent; color: var(--ink-2);
+  border-radius: 6px; padding: .12rem .6rem; font-size: .74rem; cursor: pointer;
+}
+.task .t-ops .mini:hover { border-color: var(--seal); color: var(--seal); }
+.task .t-ops .mini.cancel:hover { border-color: var(--err); color: var(--err); }
+.task .t-ops .mini.x { border: none; color: var(--ink-3); padding: .1rem .3rem; }
+.task .t-ops .cancelling { font-size: .74rem; color: var(--ink-3); }
+.task.ok .t-msg { color: var(--ok); }
+.task.err .t-msg { color: var(--err); }
+.task.err .t-ops .mini.retry { border-color: var(--err); color: var(--err); }
+.task.cancelled .t-msg { color: var(--ink-3); }
 
 /* 滚动条细雅 */
 ::-webkit-scrollbar { width: 10px; }

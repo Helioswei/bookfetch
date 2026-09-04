@@ -21,6 +21,11 @@ class FetchError(Exception):
     """Raised when a source page cannot be fetched after retries."""
 
 
+class CancelledError(Exception):
+    """Raised inside a source fetch loop when the user cancelled the job
+    (checked cooperatively at chapter boundaries via the on_progress hook)."""
+
+
 def _pace(host: str) -> None:
     now = time.monotonic()
     last = _last_request.get(host, 0.0)
@@ -67,7 +72,7 @@ def fetch_bytes(url: str, *, timeout: float = 30.0, retries: int = _max_retries)
             last_err = e
             if attempt < retries:
                 time.sleep(3.0 * (attempt + 1))
-    raise FetchError(f"GET {url} failed after {retries} tries: {last_err}")
+    raise FetchError(f"GET {url} 失败（已重试 {retries} 次）：{last_err}")
 
 
 def decode_bytes(data: bytes) -> str:

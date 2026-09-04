@@ -7,7 +7,7 @@ import re
 from urllib.parse import parse_qs, quote, urlparse
 
 from ..model import Book, Chapter, FetchResult
-from ..util import FetchError, fetch
+from ..util import CancelledError, FetchError, fetch
 from ..util.splitters import split_headings
 from .base import Source
 
@@ -95,13 +95,14 @@ def _chapter_title(anchor: str, idx: int) -> str:
 
 class Ctext(Source):
     name = "ctext"
+    label = "中文古籍"
 
     def search(self, query: str) -> list[Book]:
         """Search ctext 書名檢索. Network errors propagate to the CLI errors dict."""
         page = fetch(SEARCH_URL.format(q=quote(query)))
         return _parse_search_page(page)
 
-    def fetch(self, book: Book) -> FetchResult:
+    def fetch(self, book: Book, *, on_progress=None) -> FetchResult:
         """Fetch a whole book: res page -> ordered wiki pages -> chapters.
 
         Each wiki page becomes one or more chapters: standalone 《》/卷
@@ -121,6 +122,8 @@ class Ctext(Source):
         chapters: list[Chapter] = []
         all_lines: list[str] = []
         for idx, (cid, anchor) in enumerate(anchors, 1):
+            if on_progress and not on_progress(idx - 1, len(anchors)):
+                raise CancelledError()
             try:
                 page = fetch(CHAPTER_URL.format(cid=cid))
             except FetchError as e:

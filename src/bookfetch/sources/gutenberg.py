@@ -94,12 +94,13 @@ def _strip_pg(text: str) -> str:
 
 class Gutenberg(Source):
     name = "gutenberg"
+    label = "英文公版"
 
     def search(self, query: str) -> list[Book]:
         page = fetch(SEARCH_URL.format(q=query.strip().replace(" ", "+")))
         return _parse_search_page(page)
 
-    def fetch(self, book: Book) -> FetchResult:
+    def fetch(self, book: Book, *, on_progress=None) -> FetchResult:
         eid = book.id
         if not eid.isdigit():
             raise ValueError(f"gutenberg id must be an ebook number, got: {book.id!r}")

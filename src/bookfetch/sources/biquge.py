@@ -19,7 +19,7 @@ import re
 from urllib.parse import quote
 
 from ..model import Book, Chapter, FetchResult
-from ..util import fetch
+from ..util import CancelledError, fetch
 from .base import Source
 
 _SEARCH_URL = "https://www.biquge.tw/search.php?keyword={q}"
@@ -98,6 +98,7 @@ def _parse_chapter(html: str) -> tuple[str, str]:
 
 class Biquge(Source):
     name = "biquge"
+    label = "网络小说"
 
     def search(self, query: str) -> list[Book]:
         html = fetch(_SEARCH_URL.format(q=quote(query)))
@@ -119,7 +120,7 @@ class Biquge(Source):
             ))
         return books
 
-    def fetch(self, book: Book) -> FetchResult:
+    def fetch(self, book: Book, *, on_progress=None) -> FetchResult:
         """整本下载: 目录页 → 逐章正文 (每章一请求, 全局限速 2s/请求).
         1361 章的书 ≈ 45 分钟; 空壳章节跳过不中断."""
         book_id = book.id.strip()
@@ -131,7 +132,9 @@ class Biquge(Source):
             raise ValueError(f"目录页无章节 (书 {book_id} 不存在或已下架?)")
         chapters: list[Chapter] = []
         skipped = 0
-        for cid, toc_title in toc:
+        for i, (cid, toc_title) in enumerate(toc):
+            if on_progress and not on_progress(i, len(toc)):
+                raise CancelledError()
             html = fetch(_CHAPTER_URL.format(book_id=book_id, cid=cid))
             ctitle, ctext = _parse_chapter(html)
             if not ctext:

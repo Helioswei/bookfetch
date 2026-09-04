@@ -36,6 +36,12 @@ def source_names() -> list[str]:
     return list(_REGISTRY)
 
 
+def source_catalog() -> list[dict]:
+    """Ordered [{name, label}] for the UI chips (D1 decision A: Chinese label
+    first, raw source name kept for the technically inclined)."""
+    return [{"name": n, "label": _REGISTRY[n].label} for n in _REGISTRY]
+
+
 def search_all(query: str, names: list[str] | None = None, limit: int = 20):
     """Search across sources. Returns (results, errors_by_source)."""
     names = names or source_names()

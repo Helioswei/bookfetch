@@ -73,6 +73,7 @@ def _mirrors() -> list[str]:
 
 class Libgen(Source):
     name = "libgen"
+    label = "电子书库"
 
     def _first(self) -> str:
         alive = _mirrors()
@@ -120,7 +121,7 @@ class Libgen(Source):
             )
         return books
 
-    def fetch(self, book: Book) -> FetchResult:
+    def fetch(self, book: Book, *, on_progress=None) -> FetchResult:
         md5 = book.id.strip().lower()
         if not re_fullmatch_hex(md5):
             raise ValueError(f"libgen id must be a 32-char md5, got {book.id!r}")

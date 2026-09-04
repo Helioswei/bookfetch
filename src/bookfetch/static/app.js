@@ -84,23 +84,31 @@ let _searchCache = [];   // 最近一次搜索的完整结果（下载按钮按�
 async function loadSources() {
   try {
     const r = await BF.api('sources', {});
-    state.sources = r.sources || [];
+    // sources API 返回 [{name, label}]；chips 显示中文 label + 灰小字源名（D1-A）
+    state.catalog = r.sources || [];
+    state.slabel = {};
+    state.catalog.forEach((s) => { state.slabel[s.name] = s.label; });
     const chips = $('#source-chips');
     chips.innerHTML = '';
-    [['all', '全部']].concat(state.sources.map((s) => [s, s])).forEach(([val, label]) => {
+    const add = (name, label, on) => {
       const b = document.createElement('button');
-      b.type = 'button'; b.className = 'chip' + (val === 'all' ? ' on' : '');
-      b.textContent = label;
+      b.type = 'button'; b.className = 'chip' + (on ? ' on' : '');
+      b.dataset.name = name;
+      b.innerHTML = `<span class="cl">${esc(label)}</span>${name !== 'all' ? `<small>${esc(name)}</small>` : ''}`;
       b.onclick = () => {
         chips.querySelectorAll('.chip').forEach((c) => c.classList.remove('on'));
         b.classList.add('on');
-        state.chip = val;
+        state.chip = name;
         $('#search-q').focus();
       };
       chips.appendChild(b);
-    });
+    };
+    add('all', '全部', true);
+    state.catalog.forEach((s) => add(s.name, s.label, false));
   } catch (e) { /* 源列表失败不阻塞 */ }
 }
+
+const labelOf = (name) => (state.slabel && state.slabel[name]) || name;
 
 async function doSearch(q) {
   const box = $('#search-results');
@@ -115,7 +123,8 @@ async function doSearch(q) {
   _searchCache = r.results || [];
   const meta = [];
   if (r.count) meta.push(`命中 ${r.count} 条`);
-  Object.entries(r.errors || {}).forEach(([s, e]) => meta.push(`<span class="badge warn">${esc(s)}: ${esc(e)}</span>`));
+  Object.entries(r.errors || {}).forEach(([s, e]) =>
+    meta.push(`<span class="badge warn" title="技术详情见日志 bookfetch.log">${esc(labelOf(s))}：${esc(e)}</span>`));
   $('#search-meta').innerHTML = meta.join(' ');
   if (!_searchCache.length) {
     box.innerHTML = '<p class="empty">没有结果——换个关键词，或点上面的源标签试试单个源</p>';
@@ -135,7 +144,7 @@ function bookCard(b, i) {
   <div class="card">
     <h3>${esc(b.title)}</h3>
     <div class="sub">${esc(b.subtitle || '')}</div>
-    <div class="badges"><span class="badge">${esc(b.source)}</span>${lic}</div>
+    <div class="badges"><span class="badge" title="${esc(b.source)}">${esc(labelOf(b.source))}</span>${lic}</div>
     <div class="actions">${btn}</div>
   </div>`;
 }
@@ -148,42 +157,107 @@ $('#search-results').addEventListener('click', (e) => {
   addTask(b, btn.dataset.fmt);
 });
 
+/* ---------- 下载任务面板 ---------- */
+const _finished = { n: 0 };
+
+function bumpBadge() {
+  _finished.n += 1;
+  const bd = $('#tasks-badge');
+  bd.textContent = `${_finished.n} 项完成`;
+  bd.classList.remove('hidden');
+}
+
+$('#tasks-toggle').addEventListener('click', () => {
+  const t = $('#tasks');
+  t.classList.toggle('collapsed');
+  const icon = t.classList.contains('collapsed') ? '▸' : '▾';
+  $('#tasks-toggle').textContent = icon;
+});
+
 function addTask(b, fmt) {
   const title = b.title || b.id;
+  const box = $('#tasks');
+  box.classList.remove('hidden', 'collapsed');  // 新任务自动展开
+  $('#tasks-toggle').textContent = '▾';
+  const isRaw = !!(b.extra && (b.extra.extension || b.extra.raw));
+  const realFmt = isRaw ? '' : (fmt || 'txt');
   const t = document.createElement('div');
   t.className = 'task';
   t.innerHTML = `
-    <div class="t-row"><span class="t-title">${esc(title)}</span>
-      <button class="close" title="关闭">✕</button></div>
+    <div class="t-row"><span class="t-title" title="${esc(title)}">${esc(title)}</span>
+      <span class="t-fmt">${esc(realFmt || '原文件')}</span></div>
     <div class="t-msg">排队中…</div>
-    <div class="t-bar"><i></i></div>`;
-  t.querySelector('.close').onclick = () => { t.remove(); };
-  $('#tasks').classList.remove('hidden');
-  $('#tasks').appendChild(t);
-  const isRaw = !!(b.extra && (b.extra.extension || b.extra.raw));
-  const realFmt = isRaw ? '' : (fmt || 'txt');
+    <div class="t-bar"><i style="width:0%"></i></div>
+    <div class="t-ops"></div>`;
+  $('#tasks-list').appendChild(t);
   BF.api('download', { source: b.source, id: b.id, title: b.title, fmt: realFmt })
-    .then((r) => pollTask(r.task_id, t, title))
-    .catch((e) => { t.classList.add('err'); t.querySelector('.t-msg').textContent = e.message; });
+    .then((r) => pollTask(r.task_id, t, { b, fmt: realFmt }))
+    .catch((e) => {
+      t.classList.add('err');
+      t.querySelector('.t-msg').textContent = '无法开始下载：' + (e.message || '');
+      const bar = t.querySelector('.t-bar'); if (bar) bar.remove();
+    });
 }
 
-function pollTask(taskId, el, title) {
+const taskOps = (el, html) => {
+  const ops = el.querySelector('.t-ops');
+  ops.innerHTML = html;
+  return ops;
+};
+
+function pollTask(taskId, el, spec) {
   const tick = async () => {
     let r;
     try { r = await BF.api('task_status', { task_id: taskId }); }
-    catch { return; }
+    catch { setTimeout(tick, 1500); return; }  // 瞬断不杀轮询
     const msg = el.querySelector('.t-msg');
+    const bar = el.querySelector('.t-bar');
+    if (r.status === 'unknown') { el.remove(); return; }
     if (r.status === 'done') {
       el.classList.add('ok');
-      msg.textContent = `完成 → ${r.out_rel}`;
-      msg.innerHTML += ` <a href="#" class="go-shelf">去书架</a>`;
-      el.querySelector('.go-shelf').onclick = (ev) => { ev.preventDefault(); showView('shelf'); };
-      el.querySelector('.t-bar').remove();
-      return; // 停止轮询
+      msg.innerHTML = '完成';
+      if (bar) bar.remove();
+      taskOps(el, `<button class="mini open">打开阅读</button><button class="mini x" title="移除">✕</button>`)
+        .querySelector('.open').onclick = () => { el.remove(); openReader(r.out_rel); };
+      el.querySelector('.x').onclick = () => el.remove();
+      bumpBadge();
+      return;
     }
-    if (r.status === 'error') { el.classList.add('err'); msg.textContent = r.message || '失败'; return; }
-    msg.textContent = r.message || '下载中…';
-    setTimeout(tick, 1500);
+    if (r.status === 'error') {
+      el.classList.add('err');
+      msg.textContent = r.message || '下载失败';
+      if (bar) bar.remove();
+      taskOps(el, `<button class="mini retry">重试</button><button class="mini x" title="移除">✕</button>`)
+        .querySelector('.retry').onclick = () => { el.remove(); addTask(spec.b, spec.fmt); };
+      el.querySelector('.x').onclick = () => el.remove();
+      return;
+    }
+    if (r.status === 'cancelled') {
+      el.classList.add('cancelled');
+      msg.textContent = '已取消';
+      if (bar) bar.remove();
+      taskOps(el, `<button class="mini x" title="移除">✕</button>`);
+      el.querySelector('.x').onclick = () => el.remove();
+      return;
+    }
+    // running：有 progress → 百分比进度；否则阶段文字 + 流动动画
+    const i = bar && bar.querySelector('i');
+    if (r.progress && r.progress.total) {
+      const pct = Math.max(2, Math.round(r.progress.done / r.progress.total * 100));
+      msg.textContent = `下载中 ${r.progress.done}/${r.progress.total}`;
+      if (i) { i.style.width = pct + '%'; i.style.animation = 'none'; }
+    } else {
+      msg.textContent = r.message || '下载中…';
+      if (bar) bar.classList.add('idle');
+    }
+    if (!el.querySelector('.t-ops .cancel')) {
+      taskOps(el, `<button class="mini cancel">取消</button>`)
+        .querySelector('.cancel').onclick = async () => {
+          el.querySelector('.t-ops').innerHTML = '<span class="cancelling">取消中…</span>';
+          try { await BF.api('cancel', { task_id: taskId }); } catch { /* 任务可能已完成 */ }
+        };
+    }
+    setTimeout(tick, 1200);
   };
   tick();
 }

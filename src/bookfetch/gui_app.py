@@ -39,6 +39,9 @@ def run(debug: bool = False) -> int:
         return 2
 
     n2core.library_dir().mkdir(parents=True, exist_ok=True)  # shelf root exists
+    from .logging_setup import setup_logging
+
+    setup_logging(n2core.config_dir())  # idempotent; CLI main also calls it
 
     # localhost-only server on a random free port; frontend talks to it over
     # plain http (same code path as `bookfetch serve`, fully exercised).

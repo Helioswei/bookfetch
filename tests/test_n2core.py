@@ -98,7 +98,7 @@ class _FakeSrc:
     def __init__(self):
         self.calls = 0
 
-    def fetch(self, book):
+    def fetch(self, book, *, on_progress=None):
         self.calls += 1
         return FetchResult(
             source="fake", id=book.id, title=book.title or "假书",
@@ -112,10 +112,40 @@ def _wait_task(task_id: str, timeout: float = 10.0) -> dict:
     t0 = time.time()
     while time.time() - t0 < timeout:
         st = n2core.task_status(task_id)
-        if st["status"] in ("done", "error"):
+        if st["status"] in ("done", "error", "cancelled"):
             return st
         time.sleep(0.02)
     raise AssertionError("task did not finish")
+
+
+def test_download_cancel_sets_cancelled_status(env, monkeypatch):
+    """cancel() → the cooperative hook aborts the fetch with CancelledError."""
+    from bookfetch.util import CancelledError
+
+    class _CancelSrc:
+        name = "cancelsrc"
+
+        def fetch(self, book, *, on_progress=None):
+            if on_progress and not on_progress(0, 10):
+                raise CancelledError()  # what a real multi-chapter source does
+            raise AssertionError("on_progress must have returned False after cancel")
+
+    monkeypatch.setattr("bookfetch.n2core.get_source", lambda name: _CancelSrc())
+    r = n2core.download("cancelsrc", "9", title="取消书", fmt="txt")
+    st = n2core.cancel(r["task_id"])
+    assert st["ok"] is True
+    st = _wait_task(r["task_id"])
+    assert st["status"] == "cancelled", st
+
+
+def test_cancel_unknown_and_finished(env, monkeypatch):
+    assert n2core.cancel("nope")["ok"] is False
+    fake = _FakeSrc()
+    monkeypatch.setattr("bookfetch.n2core.get_source", lambda name: fake)
+    r = n2core.download("fake", "42", title="测试书", fmt="txt")
+    _wait_task(r["task_id"])
+    st = n2core.cancel(r["task_id"])
+    assert st["ok"] is False and "已完成" in st["message"]
 
 
 def test_download_writes_into_library(env, monkeypatch):
@@ -146,7 +176,7 @@ def test_download_raw_passthrough(env, monkeypatch):
     class _RawSrc:
         name = "rawsrc"
 
-        def fetch(self, book):
+        def fetch(self, book, *, on_progress=None):
             return FetchResult(
                 source="rawsrc", id=book.id, title="PDF书",
                 chars=0, lines=0, format="pdf", content="", chapters=None,

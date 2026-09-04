@@ -12,6 +12,7 @@ class Source(ABC):
     except for util's built-in rate limiting."""
 
     name: str = "base"
+    label: str = "未知书源"  # user-facing Chinese label (D1 decision A)
 
     @abstractmethod
     def search(self, query: str) -> list[Book]:
@@ -19,6 +20,12 @@ class Source(ABC):
         callers surface errors via the errors dict instead."""
 
     @abstractmethod
-    def fetch(self, book: Book) -> FetchResult:
+    def fetch(self, book: Book, *, on_progress=None) -> FetchResult:
         """Fetch and parse one edition into content + optional chapter
-        structure. Never writes files — the CLI renders txt/epub."""
+        structure. Never writes files — the CLI renders txt/epub.
+
+        Multi-request sources (chapter-at-a-time: biquge/ctext/wikisource)
+        MUST call on_progress(done, total) before each chapter and abort with
+        util.CancelledError when it returns False (user cancelled).
+        Single-request sources accept and ignore the hook.
+        """

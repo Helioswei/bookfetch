@@ -196,6 +196,7 @@ def _repo_paths(cfg: dict) -> list[str]:
 
 class GithubBooks(Source):
     name = "github"
+    label = "古籍仓库"
 
     def search(self, query: str) -> list[Book]:
         books: list[Book] = []
@@ -204,7 +205,7 @@ class GithubBooks(Source):
             books.extend(_search_paths(paths, cfg, query))
         return books
 
-    def fetch(self, book: Book) -> FetchResult:
+    def fetch(self, book: Book, *, on_progress=None) -> FetchResult:
         """Fetch one raw txt file; chapter structure comes from headings."""
         repo, sep, path = book.id.partition(":")
         if not sep or not repo or not path:

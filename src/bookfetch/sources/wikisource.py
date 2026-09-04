@@ -17,7 +17,7 @@ from html.parser import HTMLParser
 from urllib.parse import quote, unquote
 
 from ..model import Book, Chapter, FetchResult
-from ..util import FetchError, fetch
+from ..util import CancelledError, FetchError, fetch
 from .base import Source
 
 API = "https://{host}/w/api.php"
@@ -199,11 +199,12 @@ class Wikisource(Source):
         self.lang = lang
         self.host = "zh.wikisource.org" if lang == "zh" else f"{lang}.wikisource.org"
         self.name = "wikisource" if lang == "zh" else f"wikisource-{lang}"
+        self.label = "中文公版" if lang == "zh" else "英文公版"
 
     def search(self, query: str) -> list[Book]:
         return _search_json(fetch(search_url(self.host, query)), self.host, self.name)
 
-    def fetch(self, book: Book) -> FetchResult:
+    def fetch(self, book: Book, *, on_progress=None) -> FetchResult:
         title = book.id
         main_html = _parse_payload(fetch(parse_url(self.host, title)))
         toc = extract_toc_titles(main_html)
@@ -211,7 +212,9 @@ class Wikisource(Source):
         for ch in html_to_chapters(main_html):
             if ch.title or ch.text.strip():
                 chapters.append(ch)
-        for page_title in toc:
+        for i, page_title in enumerate(toc):
+            if on_progress and not on_progress(i, len(toc)):
+                raise CancelledError()
             sub_html = _parse_payload(fetch(parse_url(self.host, page_title)))
             sub_chs = html_to_chapters(sub_html)
             if not sub_chs:

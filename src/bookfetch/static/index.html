@@ -65,8 +65,15 @@
   </div>
 </section>
 
-<!-- 下载任务 toast -->
-<div id="tasks" class="tasks hidden"></div>
+<!-- 下载任务面板（右下角常驻，可收起；D1） -->
+<div id="tasks" class="tasks hidden">
+  <div class="tasks-head">
+    <span class="tasks-title">下载任务</span>
+    <em id="tasks-badge" class="badge-count hidden"></em>
+    <button id="tasks-toggle" class="tasks-toggle" title="收起/展开">▾</button>
+  </div>
+  <div id="tasks-list" class="tasks-list"></div>
+</div>
 
 <script src="app.js"></script>
 </body>

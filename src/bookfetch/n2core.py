@@ -15,6 +15,7 @@ client can never touch files outside the library.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import threading
@@ -27,14 +28,35 @@ from typing import Callable
 from . import fetch_cache
 from .cli import _ensure_chapters, _render_get
 from .model import Book, Chapter, FetchResult
-from .sources import get_source, source_names
+from .sources import get_source, source_catalog, source_names
+from .util import CancelledError, FetchError
 from .util.epub import build_epub
+
+logger = logging.getLogger("bookfetch")
 
 _CFG_DIR = Path(os.environ.get("BOOKFETCH_CONFIG", "~/.config/bookfetch")).expanduser()
 _PROGRESS = _CFG_DIR / "progress.json"
 _LOCK = threading.Lock()
 _TASKS: dict[str, _Job] = {}
 _TASK_ID = 0
+
+
+def config_dir() -> Path:
+    """Config dir (progress.json, bookfetch.log live here)."""
+    return _CFG_DIR
+
+
+def friendly(exc: BaseException) -> str:
+    """Map an internal exception to a short user-facing Chinese message.
+
+    Full technical detail goes to the log file (logging_setup) — end users and
+    the search-meta line get this friendly line instead (D1 decision 3).
+    """
+    if isinstance(exc, FetchError):
+        return "网络请求失败（已自动重试仍不通）——请检查网络或稍后重试"
+    if isinstance(exc, (UnicodeEncodeError, UnicodeDecodeError, ValueError, json.JSONDecodeError)):
+        return f"内容解析异常——该源返回了无法处理的数据，可能已改版（{type(exc).__name__}）"
+    return f"{type(exc).__name__}: {exc}"
 
 
 def library_dir() -> Path:
@@ -78,7 +100,8 @@ def search(query: str, sources: list[str] | None = None, limit: int = 30) -> dic
             for b in src.search(query):
                 out.append(b.to_dict())
         except Exception as e:  # noqa: BLE001 — per-source failures are reported, not fatal
-            errors[n] = f"{type(e).__name__}: {e}"
+            logger.warning("search source %s failed: %s", n, e, exc_info=True)
+            errors[n] = friendly(e)
 
     threads = [threading.Thread(target=_one, args=(n,), daemon=True) for n in names]
     for t in threads:
@@ -108,9 +131,12 @@ class _Job:
     book_id: str
     title: str
     fmt: str
-    status: str = "running"   # running | done | error
+    status: str = "running"   # running | done | error | cancelled
     out_rel: str = ""
     message: str = ""
+    cancel: bool = False
+    done: int = 0     # progress: chapters fetched so far (multi-chapter sources)
+    total: int = 0
 
 
 def _run_job(job: _Job) -> None:
@@ -121,7 +147,12 @@ def _run_job(job: _Job) -> None:
         book = Book(source=job.source, id=job.book_id, title=job.title)
         fr = fetch_cache.load(job.source, job.book_id)
         if fr is None:
-            fr = src.fetch(book)
+            def on_progress(done: int, total: int) -> bool:
+                job.done, job.total = done, total
+                return not job.cancel
+
+            job.message = "抓取中…"
+            fr = src.fetch(book, on_progress=on_progress)
             fetch_cache.save(job.source, job.book_id, fr)
         if fr.raw is not None:
             # binary passthrough: _render_get saves the original .epub/.pdf
@@ -131,14 +162,20 @@ def _run_job(job: _Job) -> None:
         else:
             fmt = job.fmt if job.fmt in ("txt", "epub") else "txt"
             simp = split = False
+        job.message = "整理成书…"
         ns = Namespace(out=str(library_dir()), format=fmt, simplify=simp, split=split)
         fr = _render_get(src, fr, ns)
         job.out_rel = library_rel(Path(fr.out_path))
         job.status = "done"
         job.message = f"{fr.chars:,} chars · {len(_ensure_chapters(fr))} chapters"
+    except CancelledError:
+        job.status = "cancelled"
+        job.message = "已取消"
+        logger.info("download job %s cancelled by user", job.id)
     except Exception as e:  # surface any failure to the UI
         job.status = "error"
-        job.message = f"{type(e).__name__}: {e}"
+        logger.exception("download job %s (%s %s) failed", job.id, job.source, job.book_id)
+        job.message = friendly(e)
 
 
 def download(source: str, id: str, title: str = "", fmt: str = "txt") -> dict:
@@ -156,12 +193,29 @@ def task_status(task_id: str) -> dict:
         job = _TASKS.get(task_id)
     if job is None:
         return {"task_id": task_id, "status": "unknown"}
-    return {
+    out: dict[str, object] = {
         "task_id": task_id,
         "status": job.status,
         "message": job.message,
         "out_rel": job.out_rel,
+        "fmt": job.fmt,
     }
+    if job.status == "running" and job.total:
+        out["progress"] = {"done": job.done, "total": job.total}
+    return out
+
+
+def cancel(task_id: str) -> dict:
+    """Ask a running job to stop at the next chapter boundary (cooperative)."""
+    with _LOCK:
+        job = _TASKS.get(task_id)
+    if job is None:
+        return {"task_id": task_id, "ok": False, "message": "任务不存在"}
+    if job.status != "running":
+        zh = {"done": "已完成", "error": "失败", "cancelled": "已取消"}.get(job.status, job.status)
+        return {"task_id": task_id, "ok": False, "message": f"任务已{zh}"}
+    job.cancel = True
+    return {"task_id": task_id, "ok": True, "message": "取消中…"}
 
 
 # ------------------------------------------------------------------ shelf ---
@@ -333,6 +387,8 @@ def api_call(name: str, params: dict) -> dict:
         return download(params.get("source", ""), params.get("id", ""), params.get("title", ""), params.get("fmt", "txt"))
     if name == "task_status":
         return task_status(params.get("task_id", ""))
+    if name == "cancel":
+        return cancel(params.get("task_id", ""))
     if name == "shelf":
         return shelf()
     if name == "open_book":
@@ -346,11 +402,11 @@ def api_call(name: str, params: dict) -> dict:
     if name == "library":
         return {"library": str(library_dir())}
     if name == "sources":
-        return {"sources": source_names()}
+        return {"sources": source_catalog()}
     raise ValueError(f"unknown api: {name}")
 
 
 BUILTIN_API = {
-    "search", "download", "task_status", "shelf", "open_book",
+    "search", "download", "cancel", "task_status", "shelf", "open_book",
     "chapter", "progress_get", "progress_set", "library", "sources",
 }

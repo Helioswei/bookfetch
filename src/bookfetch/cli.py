@@ -144,6 +144,10 @@ def main(argv: list[str] | None = None) -> int:
     gu.add_argument("--debug", action="store_true", help="open WebView devtools")
 
     args = p.parse_args(argv)
+    from . import n2core
+    from .logging_setup import setup_logging
+
+    setup_logging(n2core.config_dir())  # all subcommands log to bookfetch.log
     try:
         if args.cmd == "serve":
             from .server import serve as _serve
