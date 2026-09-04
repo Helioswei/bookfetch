@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>诡秘之主 - 搜尋結果 - 筆趣閣</title>
+<meta name="keywords" content="诡秘之主">
+<meta name="description" content="筆趣閣為您搜尋「诡秘之主」相關小說資訊。">
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
+<style>
+/* ── Variables ── */
+:root {
+  --pri:     #ff6b35;   /* 暖橙 — 文学感 */
+  --pri-d:   #e8521c;
+  --pri-bg:  #fff5f0;
+  --teal:    #0d9488;   /* 点缀绿 */
+  --text:    #1f2937;
+  --sub:     #6b7280;
+  --muted:   #9ca3af;
+  --bg:      #f5f0eb;
+  --card:    #fdfbf9;
+  --border:  #e8e8e8;
+  --radius:  10px;
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-size: 15px;
+  line-height: 1.5;
+}
+a { color: inherit; text-decoration: none; }
+img { display: block; }
+
+/* ── Header ── */
+.header {
+  background: #fdfbf9;
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 6px rgba(0,0,0,.06);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.header-inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.logo {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--pri);
+  letter-spacing: 1px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.logo span { color: var(--text); font-weight: 400; font-size: 13px; margin-left: 4px; }
+
+/* Search bar */
+.search-form { flex: 1; display: flex; min-width: 0; }
+.search-bar {
+  flex: 1;
+  display: flex;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #fdfbf9;
+  transition: border-color .2s, box-shadow .2s;
+}
+.search-bar:focus-within {
+  border-color: var(--pri);
+  box-shadow: 0 0 0 3px rgba(255,107,53,.12);
+}
+.search-bar input {
+  flex: 1;
+  border: none;
+  outline: none;
+  padding: 9px 14px;
+  font-size: 15px;
+  color: var(--text);
+  background: #fdfbf9;
+  min-width: 0;
+}
+.search-bar input::placeholder { color: var(--muted); }
+.btn-submit {
+  border: none;
+  background: var(--pri);
+  color: #fff;
+  padding: 0 22px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: background .15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.btn-submit:hover { background: var(--pri-d); }
+
+/* Nav links in header */
+.header-nav { display: flex; gap: 4px; flex-shrink: 0; }
+.header-nav a {
+  font-size: 13px;
+  color: var(--sub);
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: .15s;
+  white-space: nowrap;
+}
+.header-nav a:hover { background: var(--pri-bg); color: var(--pri); }
+
+/* Mobile: search full width */
+@media (max-width: 640px) {
+  .header-inner { flex-wrap: wrap; padding: 10px 12px 8px; gap: 8px; }
+  .logo { order: 1; }
+  .header-nav { order: 2; margin-left: auto; }
+  .header-nav .nav-text { display: none; }
+  .search-form { order: 3; flex-basis: 100%; }
+  .btn-submit { padding: 0 16px; }
+}
+
+/* ── Sort bar ── */
+.sort-wrap {
+  background: #fdfbf9;
+  border-bottom: 1px solid var(--border);
+}
+.sort-inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 2px;
+}
+.sort-inner::-webkit-scrollbar { display: none; }
+.sort-link {
+  padding: 11px 16px;
+  font-size: 14px;
+  color: var(--sub);
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: color .2s, border-color .2s;
+  cursor: pointer;
+}
+.sort-link:hover { color: var(--pri); }
+.sort-link.active { color: var(--pri); border-bottom-color: var(--pri); font-weight: 600; }
+
+/* ── Main content ── */
+.main {
+  flex: 1;
+  max-width: 960px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 14px 16px 40px;
+}
+
+/* ── History ── */
+.history-bar { display: none; margin-bottom: 14px; }
+.history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.history-label { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .5px; }
+.history-clear {
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  transition: .15s;
+}
+.history-clear:hover { color: #ef4444; border-color: #fca5a5; }
+.history-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.htag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px 4px 12px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: .15s;
+  user-select: none;
+}
+.htag:hover { border-color: var(--pri); color: var(--pri); }
+.hdel {
+  width: 15px; height: 15px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; color: var(--muted);
+  transition: .15s;
+}
+.hdel:hover { background: #fee2e2; color: #ef4444; }
+
+/* ── Notices ── */
+.notices {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.notice {
+  flex: 1;
+  min-width: 140px;
+  padding: 9px 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  text-align: center;
+  border: 1px solid transparent;
+}
+.notice a { font-weight: 600; }
+.notice-find { background: #fff5f0; border-color: #ffd4c0; color: #9a3412; }
+.notice-find a { color: var(--pri); }
+.notice-line { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+.notice-line a { color: #15803d; }
+
+/* ── Result meta ── */
+.result-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--sub);
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.result-meta strong { color: var(--pri); font-weight: 700; }
+.elapsed { color: var(--muted); font-size: 12px; }
+
+/* ── Result cards ── */
+.result-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  gap: 14px;
+  margin-bottom: 10px;
+  position: relative;
+  transition: border-color .2s, box-shadow .2s, transform .15s;
+  animation: fadeUp .3s ease backwards;
+}
+.result-card:hover {
+  border-color: #ffc9a8;
+  box-shadow: 0 3px 16px rgba(255,107,53,.1);
+  transform: translateY(-1px);
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Cover */
+.book-cover { flex-shrink: 0; }
+.book-cover img {
+  width: 72px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 7px;
+  box-shadow: 2px 3px 8px rgba(0,0,0,.15);
+  background: #f0f0f0;
+}
+
+/* Book info */
+.book-info { flex: 1; min-width: 0; padding-right: 36px; }
+.book-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  display: block;
+  margin-bottom: 5px;
+  line-height: 1.4;
+  transition: color .15s;
+}
+.book-title:hover { color: var(--pri); }
+.book-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+.author { font-size: 13px; color: var(--sub); }
+.badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 4px;
+  letter-spacing: .3px;
+}
+.badge-done    { background: #dcfce7; color: #166534; }
+.badge-ongoing { background: #fef9c3; color: #854d0e; }
+.book-intro {
+  font-size: 13px;
+  color: var(--sub);
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.latest { font-size: 12px; color: var(--muted); }
+.latest a { color: var(--teal); font-weight: 500; }
+.latest a:hover { text-decoration: underline; }
+
+/* Favorite button */
+.btn-fav {
+  position: absolute;
+  top: 14px; right: 14px;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px;
+  color: #d1d5db;
+  transition: .2s;
+  padding: 0;
+}
+.btn-fav:hover { border-color: #fca5a5; color: #f87171; transform: scale(1.1); }
+.btn-fav.saved { color: #ef4444; border-color: #fca5a5; background: #fff5f5; }
+
+/* ── Empty state ── */
+.empty { text-align: center; padding: 60px 20px; }
+.empty-icon { font-size: 48px; margin-bottom: 14px; }
+.empty-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.empty-sub { font-size: 14px; color: var(--sub); margin-bottom: 22px; line-height: 1.6; }
+.empty-btn {
+  display: inline-block;
+  padding: 10px 26px;
+  background: var(--pri);
+  color: #fff;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: background .15s;
+}
+.empty-btn:hover { background: var(--pri-d); }
+
+/* ── Pagination ── */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin: 24px 0;
+  flex-wrap: wrap;
+}
+.page-btn {
+  padding: 7px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  color: var(--sub);
+  background: var(--card);
+  cursor: pointer;
+  transition: .15s;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.page-btn:hover { border-color: var(--pri); color: var(--pri); }
+.page-current {
+  padding: 7px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--pri);
+  color: #fff;
+  border: 1px solid var(--pri);
+}
+
+/* ── Footer ── */
+.site-footer {
+  background: #fdfbf9;
+  border-top: 1px solid var(--border);
+  padding: 18px 16px;
+  text-align: center;
+}
+.footer-logo { font-size: 15px; font-weight: 800; color: var(--pri); letter-spacing: 1px; }
+.footer-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.footer-copy {
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: 6px;
+  font-size: 12px; color: var(--muted); margin-top: 8px;
+}
+.footer-copy .sep { opacity: .4; }
+
+/* ── Scroll-to-top ── */
+#toTop {
+  position: fixed; bottom: 22px; right: 16px;
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 1px solid var(--border);
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0,0,0,.12);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  opacity: 0; pointer-events: none;
+  transition: opacity .25s, transform .25s;
+  z-index: 99;
+  color: var(--sub);
+}
+#toTop.show { opacity: 1; pointer-events: auto; }
+#toTop:hover { border-color: var(--pri); color: var(--pri); transform: translateY(-2px); }
+
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 72px; left: 50%;
+  transform: translateX(-50%) translateY(6px);
+  background: rgba(31,41,55,.9);
+  color: #fff; padding: 8px 18px;
+  border-radius: 20px; font-size: 13px;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s, transform .2s;
+  z-index: 200; white-space: nowrap;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── PC wider adjustments ── */
+@media (min-width: 768px) {
+  .book-cover img { width: 80px; height: 108px; }
+  .book-title { font-size: 17px; }
+  .result-card { padding: 16px 18px; }
+  .main { padding: 18px 20px 50px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ Header ═══ -->
+<header class="header">
+  <div class="header-inner">
+    <a href="/" class="logo">筆趣閣<span>搜尋</span></a>
+
+    <form method="get" id="searchForm" class="search-form">
+      <div class="search-bar">
+        <input type="text" name="search" id="searchInput"
+               value="诡秘之主"
+               placeholder="搜尋小說名稱或作者..."
+               autocomplete="off" required>
+        <input type="hidden" name="sort" value="default">
+        <button type="submit" class="btn-submit">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <span class="nav-text">搜尋</span>
+        </button>
+      </div>
+    </form>
+
+    <nav class="header-nav">
+      <a href="javascript:history.back()">←<span class="nav-text">返回</span></a>
+      <a href="/"><span class="nav-text">首頁</span></a>
+    </nav>
+  </div>
+</header>
+
+<!-- ═══ Sort bar ═══ -->
+<div class="sort-wrap">
+  <div class="sort-inner">
+        <a href="?keyword=%E8%AF%A1%E7%A7%98%E4%B9%8B%E4%B8%BB&sort=default&page=1" class="sort-link active">相關度</a>
+        <a href="?keyword=%E8%AF%A1%E7%A7%98%E4%B9%8B%E4%B8%BB&sort=chapters&page=1" class="sort-link ">章節數</a>
+        <a href="?keyword=%E8%AF%A1%E7%A7%98%E4%B9%8B%E4%B8%BB&sort=postdate&page=1" class="sort-link ">最新入庫</a>
+        <a href="?keyword=%E8%AF%A1%E7%A7%98%E4%B9%8B%E4%B8%BB&sort=lastupdate&page=1" class="sort-link ">最近更新</a>
+      </div>
+</div>
+
+<!-- ═══ Main ═══ -->
+<main class="main">
+
+  <!-- 歷史紀錄 -->
+  <div class="history-bar" id="historyBox">
+    <div class="history-head">
+      <span class="history-label">搜尋紀錄</span>
+      <span class="history-clear" onclick="clearAllHistory()">全部清除</span>
+    </div>
+    <div class="history-tags" id="historyTags"></div>
+  </div>
+
+  <!-- 提示 -->
+  <div class="notices">
+    <div class="notice notice-find">沒搜到？<a href="/findbook.php">「幫我找書」</a></div>
+    <div class="notice notice-line"><a href="https://lin.ee/KdjAWUy" target="_blank" rel="noopener">加 LINE 催更找書</a></div>
+  </div>
+
+  <!-- 結果 -->
+    <div class="result-meta">
+    <span>共找到 <strong>500</strong> 本相關小說，第 <strong>1</strong> 頁</span>
+    <span class="elapsed">耗時 287 ms</span>
+  </div>
+
+    <div class="result-card" style="animation-delay:0s">
+    <div class="book-cover">
+      <a href="/book/50045.html">
+        <img src="https://img.biquge.tw/42/42155/42155s.jpg" 
+             alt="詭秘之主"
+             loading="lazy"
+             onerror="this.style.visibility='hidden';this.removeAttribute('onerror')">
+      </a>
+    </div>
+    <div class="book-info">
+      <a href="/book/50045.html" class="book-title">詭秘之主</a>
+      <div class="book-meta">
+        <span class="author">愛潛水的烏賊</span>
+        <span class="badge badge-done">完結</span>
+      </div>
+      <div class="book-intro">    蒸汽與機械的浪潮中，誰能觸及非凡？歷史和黑暗的迷霧裏，又是誰在耳語？我從詭秘中醒來，睜眼看見這個世界：
+    槍械，大炮，巨艦，飛空艇，差分機；魔藥，占卜，詛咒，倒吊人，封印物……光明依舊照耀，神秘從未遠離，這是一段“愚者”的傳說。
+</div>
+      <div class="latest">最新章節：<a href="/book/50045/78673917.html">12月1日《詭秘之主》新番外發布</a></div>
+    </div>
+  </div>
+    <div class="result-card" style="animation-delay:0.04s">
+    <div class="book-cover">
+      <a href="/book/137738.html">
+        <img src="https://img.biquge.tw/129/129848/129848s.jpg" 
+             alt="詭秘之主"
+             loading="lazy"
+             onerror="this.style.visibility='hidden';this.removeAttribute('onerror')">
+      </a>
+    </div>
+    <div class="book-info">
+      <a href="/book/137738.html" class="book-title">詭秘之主</a>
+      <div class="book-meta">
+        <span class="author">微風小說網</span>
+        <span class="badge badge-done">完結</span>
+      </div>
+      <div class="book-intro">    蒸汽與機械的浪潮中，誰能觸及非凡？曆史和黑暗的迷霧裏，又是誰在耳語？我從詭秘中醒來，睜眼看見這個世界：　　槍械，大炮，巨艦，飛空艇，差分機；魔藥，占卜，詛咒，倒吊人，封印物……光明依舊照耀，神秘從未遠離，這是一段“愚者”的傳說。
+</div>
+      <div class="latest">最新章節：<a href="/book/137738/75891600.html">一個普通人的日常（八）</a></div>
+    </div>
+  </div>
+    <!-- FIXTURE TRUNCATED 2026-09-04 真实抓取, 3/20 卡 -->

@@ -104,10 +104,16 @@ bookfetch get ctext 727782 --out ./books --simplify
 | github | 公版中文古籍文本仓库 | 精选仓库树索引（7 天缓存），raw 直连下载 |
 | wikisource | 中文/英文公版书（含现代公版：鲁迅等） | MediaWiki API + 渲染页解析，目录自动展开整本；大陆访问需代理 |
 | gutenberg | 英文公版书 7 万+（小说/非小说） | 搜索页 → PG 官方 txt（自动剥离 Gutenberg 许可头尾）；大陆直连 |
+| biquge | 中文现代网文/小说（笔趣阁镜像，繁体） | 搜索 → 目录 → 逐章正文（章节级 txt）；大陆直连；⚠️ 版权期内内容自审，见下 |
 | libgen | 英文现代书（原文件 epub/pdf） | 探活式镜像链（域名轮换频繁），当前镜像不可达时会明确报错；需代理 |
 
-> 网络提示：ctext/github 大陆直连可用；wikisource（Wikimedia）与 libgen 大陆直连不通，
+> 网络提示：ctext/github/gutenberg/biquge 大陆直连可用；wikisource（Wikimedia）与 libgen 大陆直连不通，
 > 需能访问对应站点的网络环境（如代理），本工具遵循系统 http_proxy/https_proxy 环境变量。
+
+> ⚠️ **biquge 源特别提示**：本工具为中立下载工具（yt-dlp 模式），不存储/分发内容。笔趣阁镜像站收录的
+> 中文网文多为**版权期内作品**（2025 年北京高院终审已判「笔趣阁」为盗版平台代名词）——请仅下载你有权
+> 获取的内容（作者已开放/正版已下架/你已购买等），使用者自行承担下载与使用的合法性责任。该源默认输出繁体，
+> 可用 `--simplify` 转换。
 
 ## 源与合规
 
@@ -143,7 +149,8 @@ uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 - [x] M5: SKILL.md agent 外壳 + PyPI 发布（2026-09-04 完成：仓库已 public、PyPI bookfetch 0.3.0 已上传，安装链路端到端验证通过）
 - [x] M6: Gutenberg 英文公版源（2026-09-04 完成，许可头尾自动剥离；E2E《Alice's Adventures in Wonderland》txt/epub 全通）
 - [x] M7: github 源多仓库化 + 搜索聚合（mymmsc/books + xiaopangxia 中医药 ~700 本；license 实测标注 + 404 死亡探活，2026-09-04 完成）
-- [ ] M8: 中文网文/小说镜像链 spike（1 天级，成则加源败则放弃）
+- [x] M8: 中文网文/小说源 biquge（2026-09-04 完成：spike 探测 5 站 → biquge.tw 唯一活体全链路通 → 收录；README 版权红字免责；繁体 --simplify）
+- [ ] N1-N3（少爷 2026-09-04 提出，晚审后定）
 
 ## 许可
 

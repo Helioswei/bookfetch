@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ..model import Book
 from .base import Source
+from .biquge import Biquge
 from .ctext import Ctext
 from .github import GithubBooks
 from .gutenberg import Gutenberg
@@ -18,6 +19,7 @@ def _register(src: Source) -> Source:
     return src
 
 
+_register(Biquge())
 _register(Ctext())
 _register(GithubBooks())
 _register(Gutenberg())
