@@ -141,6 +141,9 @@ a { color: var(--seal); }
   color: var(--seal); border-bottom-color: var(--seal); font-weight: 600;
 }
 .tab { letter-spacing: .3em; text-indent: .3em; } /* 主双字导航钮专属字距 */
+/* emoji 图标钮（🌗⚙）视觉字形小于汉字/色块 emoji 大，统一放大才与文字钮同高感（2026-09-05） */
+#tab-theme, #tab-settings, #reader-theme { font-size: 1.25rem; padding: .3rem .42rem; }
+#tab-settings { font-size: 1.4rem; } /* ⚙ 齿轮字形纤细，需略大才与 🌗 视觉齐平 */
 
 /* ---------- 搜索 ---------- */
 .search-row { display: flex; flex-direction: column; gap: .8rem; margin-top: 1.4rem; }

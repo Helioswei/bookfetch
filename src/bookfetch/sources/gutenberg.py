@@ -94,7 +94,7 @@ def _strip_pg(text: str) -> str:
 
 class Gutenberg(Source):
     name = "gutenberg"
-    label = "英文公版"
+    label = "古登堡公版"  # 与 wikisource-en「英文公版」区分（2026-09-05 双英文公版重名）
 
     def search(self, query: str) -> list[Book]:
         page = fetch(SEARCH_URL.format(q=query.strip().replace(" ", "+")))

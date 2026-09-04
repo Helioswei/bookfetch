@@ -16,7 +16,7 @@
 | B. 内容区操作钮 | 搜索提交、卡片"下载"，阅读器底栏"上一章/下一章" | 1px 细线描边圆角钮（`border:1px solid #cfc3ab`，透明底）hover 朱红描边+字 | 实心朱红（`background:var(--seal)`，如 epub 下载钮） | 第一版定稿语言，保持现状别动 |
 | C. 面板内小钮 | 任务面板 `.mini`、设置模态 `✕`/`保存` | 小号描边 / `.primary` 实心朱红 | — | 只出现于浮层面板 |
 
-图标/emoji 工具钮（🌗 ⚙ Aa 🌙）一律归 A 族：同 `padding:.32rem .55rem`、同 `font-size:.95rem`、`display:inline-flex;align-items:center`，与文字钮视觉等高，**不要给它们加边框**。
+图标/emoji 工具钮（🌗 ⚙ Aa 🌙）一律归 A 族：同 `padding:.3rem .42rem`、`display:inline-flex;align-items:center`，与文字钮视觉等高，**不要给它们加边框**。emoji 字形视觉小于汉字：🌗⚙🌙 图标钮统一 `font-size:1.25rem`（CSS 已含 `#tab-theme,#tab-settings,#reader-theme`），⚙ 齿轮纤细须再单列 `#tab-settings{font-size:1.4rem}` 才与 🌗 像素级齐平（2026-09-05 截图实测：两图标 ink 高 26 vs 25px）。
 
 ## 激活态（.on / .active）语义登记
 
@@ -35,6 +35,7 @@
 4. 文案：按钮文字=当前态语义（"简"=现在读简体，点它转繁体），不用目标态。
 5. 前端渲染任何网络文本先 `esc()`；`button` 的 `font-family:inherit` 必须带（Pico 会改字体）。
 6. 历史：v0.1 定稿全一致；D1 后新增的 `.ghost-btn`（1px 边框小圆角钮）与第一版割裂，2026-09-05 已废除并入 A 族。看到 `.ghost-btn`/`.toc-btn` 残留 = 旧债，删并归族。
+7. emoji 图标大小验证用像素法：截图 + PIL 按列统计非背景像素的 ink bbox（两图标 ink 高差 ≤1px 为齐平）；vision 目测 ±20% 不可靠，别信。
 
 ## 验收（改完样式必做）
 

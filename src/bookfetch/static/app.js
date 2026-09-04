@@ -67,7 +67,7 @@ function showView(name) {
 /* ---------- 状态 ---------- */
 const state = {
   sources: [],
-  chip: 'all',
+  chip: '全部',                // 当前分类组名（SOURCE_GROUPS 的 key）
   tasks: new Map(),          // task_id -> dom el
   book: null,                // {rel,title,format,chapters[],base}
   cur: 0,                    // chapter index
@@ -83,30 +83,37 @@ const FONTS = [17, 19, 22, 25];
 /* ---------- 搜索 ---------- */
 let _searchCache = [];   // 最近一次搜索的完整结果（下载按钮按索引取）
 
+// 分类 → 源组（2026-09-05 少爷定稿：UI 只让用户选"书的类别"，源是内部实现）。
+// 顺序 = chips 显示顺序；null = 全部源。libgen 为综合库，进每个具体分类。
+const SOURCE_GROUPS = {
+  '全部': null,
+  '中文古籍': ['ctext', 'github', 'libgen'],
+  '中文近代': ['wikisource', 'libgen'],
+  '网络小说': ['biquge', 'libgen'],
+  '外文原版': ['gutenberg', 'wikisource-en', 'libgen'],
+};
+
 async function loadSources() {
   try {
     const r = await BF.api('sources', {});
-    // sources API 返回 [{name, label}]；chips 显示中文 label + 灰小字源名（D1-A）
+    // sources API 返回 [{name, label}]：label 用于结果卡片的来源徽标（分类 UI 不再暴露源名）
     state.catalog = r.sources || [];
     state.slabel = {};
     state.catalog.forEach((s) => { state.slabel[s.name] = s.label; });
     const chips = $('#source-chips');
     chips.innerHTML = '';
-    const add = (name, label, on) => {
+    Object.keys(SOURCE_GROUPS).forEach((g) => {
       const b = document.createElement('button');
-      b.type = 'button'; b.className = 'chip' + (on ? ' on' : '');
-      b.dataset.name = name;
-      b.textContent = label;  // 纯中文 label，不带英文源名（2026-09-05 反馈）
+      b.type = 'button'; b.className = 'chip' + (state.chip === g ? ' on' : '');
+      b.dataset.group = g;
+      b.textContent = g;  // 纯中文分类名，不带源名（2026-09-05 少爷定稿）
       b.onclick = () => {
-        chips.querySelectorAll('.chip').forEach((c) => c.classList.remove('on'));
-        b.classList.add('on');
-        state.chip = name;
+        state.chip = g;
+        chips.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c.dataset.group === g));
         $('#search-q').focus();
       };
       chips.appendChild(b);
-    };
-    add('all', '全部', true);
-    state.catalog.forEach((s) => add(s.name, s.label, false));
+    });
   } catch (e) { /* 源列表失败不阻塞 */ }
 }
 
@@ -117,7 +124,10 @@ async function doSearch(q) {
   box.innerHTML = '<p class="muted">搜索中…</p>';
   let r;
   try {
-    r = await BF.api('search', { query: q, sources: state.chip === 'all' ? null : [state.chip] });
+    r = await BF.api('search', {
+      query: q,
+      sources: state.chip === '全部' ? null : SOURCE_GROUPS[state.chip],
+    });
   } catch (e) {
     box.innerHTML = `<p>搜索失败：${esc(e.message)}</p>`;
     return;
@@ -129,7 +139,7 @@ async function doSearch(q) {
     meta.push(`<span class="badge warn" title="技术详情见日志 bookfetch.log">${esc(labelOf(s))}：${esc(e)}</span>`));
   $('#search-meta').innerHTML = meta.join(' ');
   if (!_searchCache.length) {
-    box.innerHTML = '<p class="empty">没有结果——换个关键词，或点上面的源标签试试单个源</p>';
+    box.innerHTML = '<p class="empty">没有结果——换个关键词，或换个书籍分类再试</p>';
     return;
   }
   box.innerHTML = _searchCache.map(bookCard).join('');
