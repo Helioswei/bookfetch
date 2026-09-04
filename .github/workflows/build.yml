@@ -27,6 +27,8 @@ jobs:
             os: windows-latest
             zip: bookfetch-windows-x64.zip
     steps:
+      - uses: actions/checkout@v4
+
       - uses: ./.github/actions/desktop-build
         with:
           zip-name: ${{ matrix.zip }}

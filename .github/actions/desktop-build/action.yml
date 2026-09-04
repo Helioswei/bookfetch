@@ -11,9 +11,8 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@v4
-
-    - uses: astral-sh/setup-uv@v5
+    # 注意：调用方 workflow 必须先 actions/checkout（相对路径 composite 依赖仓库内容）
+    - uses: astral-sh/setup-uv@v10
       with:
         python-version: "3.12"
 
