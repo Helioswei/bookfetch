@@ -31,7 +31,7 @@ from .model import Book, Chapter, FetchResult
 from .sources import get_source, source_catalog, source_names
 from .util import CancelledError, FetchError, HumanVerificationError
 from .util.epub import build_epub
-from .util.simplify import to_simplified
+from .util.simplify import to_simplified, to_traditional
 from .util.splitters import split_rendered
 
 logger = logging.getLogger("bookfetch")
@@ -363,10 +363,31 @@ def _epub_chapters(path: Path) -> list[Chapter]:
 class _OpenBook:
     chapters: list[Chapter]
     format: str
+    base: str | None = None  # 'trad'|'simp' 文本基准简繁（OpenCC 探测）；无 OpenCC → None
 
 
 _OPEN_CACHE: dict[str, _OpenBook] = {}
 _OPEN_CACHE_META: dict[str, tuple[int, int]] = {}
+
+
+def _detect_base(ob: _OpenBook) -> str | None:
+    """Detect the text's baseline script: 'trad' if it contains characters a
+    t2s pass would change, else 'simp'. None when OpenCC is unavailable
+    (optional extra missing — reader hides the toggle instead of erroring).
+    """
+    try:
+        for c in ob.chapters[:2]:
+            probe = (c.text or "")[:800]
+            if probe.strip():
+                return "trad" if to_simplified(probe) != probe else "simp"
+    except ValueError:
+        pass
+    return None
+
+
+def _conv(ob: _OpenBook, text: str) -> str:
+    """Convert away from the book's baseline script: 繁书→简 (t2s) / 简书→繁 (s2t)."""
+    return to_traditional(text) if ob.base == "simp" else to_simplified(text)
 
 
 def _open(path: Path) -> _OpenBook:
@@ -386,25 +407,28 @@ def _open(path: Path) -> _OpenBook:
                 FetchResult(source="shelf", id=key, title=path.stem, content=text)
             )
         ob = _OpenBook(chapters=chapters, format="txt")
+    ob.base = _detect_base(ob)
     _OPEN_CACHE[key] = ob
     _OPEN_CACHE_META[key] = (st.st_mtime_ns, st.st_size)
     return ob
 
 
 def open_book(rel: str, simp: bool = False) -> dict:
-    """Chapter index for the reader: {title, format, chapters:[{i,title}]}.
+    """Chapter index for the reader: {title, format, chapters:[{i,title}], base}.
 
-    simp=True 把章节标题转为简体（正文由 chapter API 转），目录随阅读器简繁切换。
+    simp=True 把目录标题转成与基准相反的语言（繁书→简 t2s / 简书→繁 s2t），
+    正文由 chapter API 转。base 供前端决定切换按钮初始态。
     """
     p = _resolve(rel)
     ob = _open(p)
     titles = [c.title or f"第{i+1}部分" for i, c in enumerate(ob.chapters)]
     if simp:
-        titles = [to_simplified(t) for t in titles]
+        titles = [_conv(ob, t) for t in titles]
     return {
         "rel": rel,
         "title": p.stem,
         "format": ob.format,
+        "base": ob.base,
         "chapters": [{"i": i, "title": t} for i, t in enumerate(titles)],
     }
 
@@ -415,7 +439,7 @@ def chapter(rel: str, idx: int, simp: bool = False) -> dict:
         raise ValueError(f"chapter index out of range: {idx}")
     c = ob.chapters[idx]
     if simp:
-        return {"rel": rel, "i": idx, "title": to_simplified(c.title or ""), "text": to_simplified(c.text)}
+        return {"rel": rel, "i": idx, "title": _conv(ob, c.title or ""), "text": _conv(ob, c.text)}
     return {"rel": rel, "i": idx, "title": c.title, "text": c.text}
 
 

@@ -13,8 +13,8 @@
   <nav class="tabs">
     <button id="tab-search" class="tab active" data-view="search">搜索</button>
     <button id="tab-shelf" class="tab" data-view="shelf">书架</button>
-    <button id="tab-theme" class="ghost-btn" title="切换明暗">🌗</button>
-    <button id="tab-settings" class="ghost-btn" title="设置">⚙</button>
+    <button id="tab-theme" title="切换明暗">🌗</button>
+    <button id="tab-settings" title="设置">⚙</button>
   </nav>
 </header>
 
@@ -68,16 +68,16 @@
 <!-- ============ 阅读视图 ============ -->
 <section id="view-reader" class="hidden">
   <header class="reader-top">
-    <button id="reader-back" class="ghost-btn">← 书架</button>
-    <button id="reader-goto-search" class="ghost-btn" title="回到搜索">搜索</button>
+    <button id="reader-back">← 书架</button>
+    <button id="reader-goto-search" title="回到搜索">搜索</button>
     <span id="reader-title" class="reader-title"></span>
     <span class="spacer"></span>
-    <button id="reader-simp" class="ghost-btn" title="简繁切换">繁</button>
-    <button id="reader-aa" class="ghost-btn" title="字号">Aa</button>
-    <button id="reader-theme" class="ghost-btn" title="夜间">🌙</button>
+    <button id="reader-toc-toggle" title="目录">目录</button>
+    <button id="reader-simp" title="简繁切换">繁</button>
+    <button id="reader-aa" title="字号">Aa</button>
+    <button id="reader-theme" title="夜间">🌙</button>
   </header>
   <div class="reader-main">
-    <button id="reader-toc-toggle" class="ghost-btn toc-btn" title="目录">☰</button>
     <aside id="reader-toc" class="reader-toc hidden">
       <ul id="toc-list"></ul>
     </aside>

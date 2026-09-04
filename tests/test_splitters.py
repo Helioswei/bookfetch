@@ -71,5 +71,7 @@ def test_split_rendered_roundtrip():
     text = "=== 卷一 ===\n正文一。\n\n=== 卷二 ===\n正文二。\n"
     chs = split_rendered(text)
     assert [c.title for c in chs] == ["卷一", "卷二"]
-    assert chs[1].text.startswith("=== 卷二 ===")
+    # 标记行开新章但不残留进正文（正文残留 = reader 显示 '=== 标题 ===' 的 bug）
+    assert chs[0].text == "正文一。"
+    assert chs[1].text == "正文二。"
     assert split_rendered("無標記的純文本。") == []

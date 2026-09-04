@@ -62,7 +62,9 @@ def _heading(line: str) -> str | None:
 def split_rendered(text: str) -> list[Chapter]:
     """Re-split a bookfetch-rendered txt (=== 标题 === separators).
 
-    Exact inverse of the txt renderer: chapter titles and bodies round-trip.
+    Exact inverse of the txt renderer: the marker line opens a chapter and is
+    dropped from its text (render writes ``=== 标题 ===\\n{text}``, so the
+    reader must not show the marker line as body content).
     Returns [] when no marker line exists (plain text → whole-text fallback).
     """
     lines = text.splitlines()
@@ -75,7 +77,7 @@ def split_rendered(text: str) -> list[Chapter]:
         assert m  # marks 由 _MARK_RE 命中而来
         title = m.group(1).strip()
         end = marks[k + 1] if k + 1 < len(marks) else len(lines)
-        chapters.append(Chapter(title=title, text="\n".join(lines[i:end])))
+        chapters.append(Chapter(title=title, text="\n".join(lines[i + 1:end]).strip()))
     return chapters
 
 

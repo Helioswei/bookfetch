@@ -69,12 +69,13 @@ const state = {
   sources: [],
   chip: 'all',
   tasks: new Map(),          // task_id -> dom el
-  book: null,                // {rel,title,format,chapters[]}
+  book: null,                // {rel,title,format,chapters[],base}
   cur: 0,                    // chapter index
   pct: 0,                    // 0..1 scroll position
   fontIdx: 1,
   readerDark: false,
-  simp: false,               // 简体阅读态（2026-09-05）
+  base: null,                // 文本基准简繁 'trad'|'simp'（open_book 返回）；null=无 OpenCC
+  simp: false,               // 已切到与基准相反的语言（2026-09-05）
 };
 
 const FONTS = [17, 19, 22, 25];
@@ -352,7 +353,7 @@ async function openReader(rel) {
   let ob;
   try { ob = await BF.api('open_book', { rel }); }
   catch (e) { alert('打开失败：' + e.message); return; }
-  state.book = ob; state.cur = 0; state.simp = false;
+  state.book = ob; state.cur = 0; state.simp = false; state.base = ob.base;
   updateSimpBtn();
   $('#reader-title').textContent = ob.title;
   renderToc(ob.chapters);
@@ -417,6 +418,7 @@ $('#reader-prev').addEventListener('click', () => goChapter(state.cur - 1));
 function exitReader(view) {
   saveProgress(); state.book = null;
   $('#reader-toc').classList.add('hidden');           // 复位目录态
+  $('#reader-toc-toggle').classList.remove('on');
   $('#reader-body').style.paddingLeft = '';
   showView(view);
 }
@@ -430,27 +432,33 @@ $('#reader-toc-toggle').addEventListener('click', () => {
   const toc = $('#reader-toc');
   toc.classList.toggle('hidden');
   $('#reader-body').style.paddingLeft = toc.classList.contains('hidden') ? '' : '300px';
+  $('#reader-toc-toggle').classList.toggle('on', !toc.classList.contains('hidden'));
 });
 
-/* 简繁切换：按钮标签 = 当前文本语言（繁 → 点击转简）；目录标题同切 */
+/* 简繁切换：按钮标签 = 当前文本语言；on = 简体阅读态（简体=朱红高亮）。
+   方向由后端按书基准决定：繁书→简(t2s)、简书→繁(s2t)——简书也可转繁读。 */
 function updateSimpBtn() {
   const b = $('#reader-simp');
-  b.textContent = state.simp ? '简' : '繁';
-  b.classList.toggle('on', state.simp);
-  b.title = state.simp ? '当前简体，点击转繁体' : '当前繁体，点击转简体';
+  if (!state.base) { b.classList.add('hidden'); return; }  // 未装 [simp] extra：不显示切换
+  const nowSimp = (state.base === 'simp') ? !state.simp : state.simp;
+  b.textContent = nowSimp ? '简' : '繁';
+  b.classList.toggle('on', nowSimp);   // on = 正在读简体（朱红 + 下划线）
+  b.title = nowSimp ? '当前简体，点击转繁体' : '当前繁体，点击转简体';
+  b.classList.remove('hidden');
 }
 $('#reader-simp').addEventListener('click', async () => {
   if (!state.book) return;
   state.simp = !state.simp;
   updateSimpBtn();
-  const cur = state.cur;
+  loadChapter();            // 正文先切（单章转换秒级完成，不等目录）
   try {
     const ob = await BF.api('open_book', { rel: state.book.rel, simp: state.simp });
     state.book.chapters = ob.chapters;
-    renderToc(ob.chapters);               // 目录标题随简繁
-  } catch (e) { alert('切换失败：' + e.message); state.simp = !state.simp; updateSimpBtn(); return; }
-  state.cur = Math.min(cur, ob.chapters.length - 1);
-  loadChapter();
+    renderToc(ob.chapters);             // 目录标题随后跟上
+  } catch (e) {
+    alert('切换失败：' + e.message);
+    state.simp = !state.simp; updateSimpBtn(); loadChapter();
+  }
 });
 
 /* 字号 + 夜间 */
@@ -463,6 +471,7 @@ $('#reader-theme').addEventListener('click', () => {
   state.readerDark = !state.readerDark;
   document.body.dataset.readerDark = state.readerDark ? '1' : '0';
   $('#reader-theme').textContent = state.readerDark ? '☀️' : '🌙';
+  $('#reader-theme').classList.toggle('on', state.readerDark);
   try { localStorage.setItem('bf-dark', state.readerDark ? '1' : '0'); } catch {}
 });
 
@@ -495,13 +504,13 @@ window.addEventListener('beforeunload', () => saveProgress());
     const f = localStorage.getItem('bf-font'); if (f) state.fontIdx = +f;
     $('#reader-body').style.fontSize = FONTS[state.fontIdx] + 'px';
     const d = localStorage.getItem('bf-dark');
-    if (d === '1') { state.readerDark = true; document.body.dataset.readerDark = '1'; $('#reader-theme').textContent = '☀️'; }
+    if (d === '1') { state.readerDark = true; document.body.dataset.readerDark = '1'; $('#reader-theme').textContent = '☀️'; $('#reader-theme').classList.add('on'); }
     const t = localStorage.getItem('bf-theme');
     if (t) document.documentElement.dataset.theme = t;
     // URL 参数覆盖（?theme=dark / ?rdark=1）：预览与截图用
     const q = new URLSearchParams(location.search);
     if (q.get('theme') === 'dark') document.documentElement.dataset.theme = 'dark';
-    if (q.get('rdark') === '1') { document.body.dataset.readerDark = '1'; $('#reader-theme').textContent = '☀️'; }
+    if (q.get('rdark') === '1') { document.body.dataset.readerDark = '1'; $('#reader-theme').textContent = '☀️'; $('#reader-theme').classList.add('on'); }
   } catch {}
   loadSources();
   // 深链/刷新恢复：`#shelf` / `#reader/<rel>` 直达视图

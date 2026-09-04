@@ -110,11 +110,25 @@ def test_reader_simp_conversion(env):
     rel = _write_book(env, "後漢書", [Chapter("卷一 帝紀", "後漢書曰：此見仁見智。")])
     ob = n2core.open_book(rel, simp=True)
     assert ob["chapters"][0]["title"] == "后汉书"  # 未分章时标题=文件名（已转简）
+    assert ob["base"] == "trad"
     c = n2core.chapter(rel, 0, simp=True)
     assert "后汉书曰：此见仁见智。" in c["text"] and "後漢書曰" not in c["text"]
     # 不转时保持原文（繁体）
     c2 = n2core.chapter(rel, 0)
     assert "後漢書曰：此見仁見智。" in c2["text"]
+
+
+def test_reader_traditional_conversion_simplified_book(env):
+    """简体书也可切繁（s2t 反向）：base='simp' → simp=True 输出繁体。"""
+    rel = _write_book(env, "渊海子平", [Chapter("卷一", "渊海子平曰：此见仁见智。")])
+    ob = n2core.open_book(rel)
+    assert ob["base"] == "simp"
+    ob2 = n2core.open_book(rel, simp=True)
+    assert ob2["chapters"][0]["title"] == "卷一"  # 无繁简差异的标题保持原样
+    c = n2core.chapter(rel, 0, simp=True)
+    assert "淵海子平曰：此見仁見智。" in c["text"] and "渊海子平曰" not in c["text"]
+    # 切回原文仍简体
+    assert "渊海子平曰：此见仁见智。" in n2core.chapter(rel, 0)["text"]
 
 
 def test_progress_roundtrip(env):
