@@ -261,8 +261,9 @@ a { color: var(--seal); }
   color: var(--ink); text-align: justify;
   background: var(--paper-card); /* 盖 Pico article 默认背景（--pico-card-background-color 不随 reader dark 翻转） */
 }
-.reader-body h1 { font-size: 1.5em; margin: .2em 0 1.4em; text-align: center; font-weight: 600; }
-.reader-body p { margin: 0 0 1.15em; text-indent: 2em; }
+.reader-body h1, .reader-body h2, .reader-body h3 { font-weight: 600; color: inherit; } /* color:inherit 防 Pico --pico-h1-color 深色不随 reader dark 翻转 */
+.reader-body h1 { font-size: 1.5em; margin: .2em 0 1.4em; text-align: center; }
+.reader-body p { margin: 0 0 1.15em; text-indent: 2em; color: inherit; } /* Pico 给 p 设 color:var(--pico-color)(html 层 light 值) 不随 body reader dark 翻转 → 强制继承正文墨色 */
 .reader-nav { display: flex; align-items: center; justify-content: center; gap: 1.3rem; padding: .7rem; border-top: 1px solid var(--line); }
 .reader-nav button { margin: 0; width: 112px; background: transparent; border: 1px solid #cfc3ab; color: var(--ink-2); }
 .reader-nav button:hover { border-color: var(--seal); color: var(--seal); }

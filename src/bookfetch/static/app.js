@@ -336,9 +336,13 @@ async function loadShelf() {
     let bar = '', pos = '<span class="pos">未读</span>';
     if (pg) {
       const ch = (pg.chapter ?? 0) + 1;
-      const pp = Math.min(100, Math.max(1, Math.round((pg.pct || 0) / 10)));
-      bar = `<span class="prog"><i style="width:${pp}%"></i></span>`;
-      pos = `<span class="pos">第 ${ch} 章 · ${pp}%</span>`;
+      // 整本进度 = (已到章 + 本章内滚动比) / 总章数；单章书/无章数时不报 % 防误导
+      let pp = null;
+      if (b.chapters > 1) {
+        pp = Math.min(100, Math.max(1, Math.round(((pg.chapter ?? 0) + (pg.pct || 0) / 1000) / b.chapters * 100)));
+      }
+      bar = pp != null ? `<span class="prog"><i style="width:${pp}%"></i></span>` : '';
+      pos = `<span class="pos">第 ${ch} 章${pp != null ? ' · ' + pp + '%' : ''}</span>`;
     }
     return `
     <div class="book-row" data-rel="${esc(b.rel)}" title="${esc(b.title)}">
@@ -407,7 +411,7 @@ function saveProgress() {
   const el = $('#reader-body');
   const max = el.scrollHeight - el.clientHeight;
   const pct = max > 0 ? el.scrollTop / max : 0;
-  BF.api('progress_set', { rel: state.book.rel, chapter: state.cur, pct: Math.round(pct * 1000) });
+  BF.api('progress_set', { rel: state.book.rel, chapter: state.cur, pct: Math.round(Math.min(1, Math.max(0, pct)) * 1000) });
 }
 let _saveTimer = null;
 function saveProgressSoon() {

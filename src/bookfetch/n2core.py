@@ -290,12 +290,17 @@ def shelf() -> dict:
             continue
         if p.suffix.lower() in _TXT_EXT + _EPUB_EXT:
             rel = library_rel(p)
+            try:
+                nch = len(_open(p).chapters)
+            except Exception:
+                nch = None  # 坏文件：不给章数，前端回退"第 N 章"不带 %
             books.append(
                 {
                     "rel": rel,
                     "title": p.stem,
                     "format": p.suffix.lower().lstrip("."),
                     "size_kb": max(1, p.stat().st_size // 1024),
+                    "chapters": nch,
                     "progress": prog.get(rel) or None,
                 }
             )

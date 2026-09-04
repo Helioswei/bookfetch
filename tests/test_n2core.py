@@ -41,6 +41,10 @@ def test_shelf_scans_library(env):
     assert r["library"].endswith("Books")
     titles = {b["title"] for b in r["books"]}
     assert titles == {"甲书", "乙书"}
+    by = {b["title"]: b for b in r["books"]}
+    # 章数随书架返回（前端算整本进度用）；单章书 chapters==1
+    assert by["甲书"]["chapters"] == 1
+    assert by["乙书"]["chapters"] == 1
     fmts = {b["format"] for b in r["books"]}
     assert fmts == {"txt", "epub"}
 
