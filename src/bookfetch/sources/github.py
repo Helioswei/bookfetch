@@ -2,12 +2,18 @@
 
 Design: each curated repo's blob list is fetched once via the git trees API
 and cached on disk for 7 days (unauthenticated GitHub API quota is 60/hr —
-this keeps usage at ~2 calls per repo per week). Searches match filenames
-locally; downloads go straight to raw.githubusercontent.com (not rate-limited
-the same way).
+this keeps usage at ~2 calls per repo per week: one repos-API health probe
++ one trees-API index refresh). Searches match filenames locally; downloads
+go straight to raw.githubusercontent.com (not rate-limited the same way).
 
-The curated repo list is deliberately small and reviewed: only public-domain
-text collections.
+M7 multi-repo + health probe (2026-09-04):
+- curated list is config-driven; each entry carries a measured license state.
+- a repo that 404s on the repos API is marked dead in the cache and every
+  search fails fast with RepoDeadError (no silent stale fallback — a dead
+  source must surface in the registry errors dict, never quietly serve a
+  7-day-old index). Transient API failures (rate limit / network) still fall
+  back to stale cache, preserving the M2 semantics.
+- dead markers expire after _CACHE_TTL, so a revived repo is re-probed.
 """
 
 from __future__ import annotations
@@ -15,6 +21,8 @@ from __future__ import annotations
 import json
 import os
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from urllib.parse import quote
 
@@ -23,18 +31,35 @@ from ..util import FetchError, fetch
 from ..util.splitters import split_headings
 from .base import Source
 
+# Curated repo list — deliberately small and reviewed. license values are the
+# measured spdx_id (None = no license file found; repo content may still be
+# public-domain text, but transcription/compilation rights are unverified →
+# README「源与合规」labels these "使用前自审").
 _REPOS: list[dict] = [
     {
         "repo": "mymmsc/books",
         "branch": "master",
         "note": "综合资料库，含《国学/八字 - 渊海子平.txt》等公版古籍文本",
+        "license": None,  # 实测 2026-09-04: repos API spdx_id = None, ★2641
+    },
+    {
+        "repo": "xiaopangxia/TCM-Ancient-Books",
+        "branch": "master",
+        "note": "中医药古籍文本 ~700 本（神农本草经/本草纲目…，平铺 txt）",
+        "license": None,  # 实测 2026-09-04: repos API spdx_id = None, ★1411
     },
 ]
 
 _TREE_URL = "https://api.github.com/repos/{repo}/git/trees/HEAD?recursive=1"
+_META_URL = "https://api.github.com/repos/{repo}"
 _RAW_URL = "https://raw.githubusercontent.com/{repo}/{branch}/{path}"
 _BLOB_URL = "https://github.com/{repo}/blob/{branch}/{path}"
 _CACHE_TTL = 7 * 24 * 3600
+_UA = "bookfetch/0.4 (https://github.com/Helioswei/bookfetch)"
+
+
+class RepoDeadError(FetchError):
+    """The repo is gone (404/410): deleted, made private, or renamed."""
 
 
 def _cache_dir() -> Path:
@@ -42,6 +67,45 @@ def _cache_dir() -> Path:
     d = Path(base)
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _cache_file(cfg: dict) -> Path:
+    return _cache_dir() / f"github_tree_{cfg['repo'].replace('/', '_')}.json"
+
+
+def _read_cache(cache: Path) -> dict | None:
+    try:
+        data = json.loads(cache.read_text(encoding="utf-8"))
+        if isinstance(data.get("paths"), list):
+            return data
+    except Exception:
+        pass
+    return None
+
+
+def _write_cache(cache: Path, *, ts: float, paths: list[str], dead: bool,
+                 license_spdx: str | None) -> None:
+    cache.write_text(json.dumps({
+        "ts": ts, "paths": paths, "dead": dead, "license": license_spdx,
+    }), encoding="utf-8")
+
+
+def _api_json(url: str) -> dict:
+    """GET JSON from api.github.com with a browser-ish UA."""
+    req = urllib.request.Request(url, headers={
+        "User-Agent": _UA, "Accept": "application/vnd.github+json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=25.0) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        if e.code in (404, 410):
+            raise RepoDeadError(
+                f"github repo {url.rsplit('/', 1)[-1]!r} 不存在（HTTP {e.code}）"
+                "—— 可能被删除/转私有/改名")
+        raise FetchError(f"github api HTTP {e.code}: {url}")
+    except Exception as e:  # network / timeout / bad json
+        raise FetchError(f"github api 请求失败: {url} ({e})") from e
 
 
 def _paths_from_tree(tree: dict) -> list[str]:
@@ -57,6 +121,14 @@ def _title_matches(query: str, path: str) -> bool:
     if not q or not base:
         return False
     return q.lower() in base.lower() or base.lower() in q.lower()
+
+
+def _license_label(cfg: dict) -> str:
+    """Human label for the repo's measured license state."""
+    spdx = cfg.get("license")
+    if spdx:
+        return spdx
+    return "未声明(权利状态不明，使用前自审)"
 
 
 def _search_paths(paths: list[str], cfg: dict, query: str) -> list[Book]:
@@ -76,34 +148,49 @@ def _search_paths(paths: list[str], cfg: dict, query: str) -> list[Book]:
                 url=_BLOB_URL.format(repo=repo, branch=branch, path=quote(path, safe="/")),
                 subtitle=cfg.get("note", ""),
                 format_hint="txt",
-                extra={"repo": repo, "folder": folder},
+                extra={
+                    "repo": repo,
+                    "folder": folder,
+                    "license": _license_label(cfg),
+                },
             )
         )
     return books
 
 
 def _repo_paths(cfg: dict) -> list[str]:
-    """Blob paths for a repo, refreshed from the trees API at most every TTL.
-    Falls back to a stale cache when the API is rate-limited or down."""
+    """Blob paths for a repo.
+
+    - fresh cache (alive) → cached paths (0 network calls)
+    - fresh cache (dead) → fail fast: RepoDeadError (no stale fallback)
+    - stale/absent cache → probe repos API (liveness + license + default
+      branch), then refresh the trees index; on 404 mark dead and raise;
+      on transient API trouble fall back to stale paths when present.
+    """
     repo = cfg["repo"]
-    cache = _cache_dir() / f"github_tree_{repo.replace('/', '_')}.json"
-    stale: list[str] | None = None
-    if cache.exists():
-        try:
-            data = json.loads(cache.read_text(encoding="utf-8"))
-            if time.time() - data.get("ts", 0) < _CACHE_TTL:
-                return data["paths"]
-            stale = data["paths"]
-        except Exception:
-            stale = None
+    cache = _cache_file(cfg)
+    data = _read_cache(cache)
+    now = time.time()
+    if data and now - data.get("ts", 0) < _CACHE_TTL:
+        if data.get("dead"):
+            raise RepoDeadError(f"github repo {repo!r} 已标记失效（404），缓存期不重试")
+        return data["paths"]
+    stale: list[str] | None = data["paths"] if data else None
     try:
-        tree = json.loads(fetch(_TREE_URL.format(repo=repo)))
+        meta = _api_json(_META_URL.format(repo=repo))
+        tree = _api_json(_TREE_URL.format(repo=repo))
         paths = _paths_from_tree(tree)
-        cache.write_text(json.dumps({"ts": time.time(), "paths": paths}), encoding="utf-8")
+        spdx = (meta.get("license") or {}).get("spdx_id")
+        cfg["branch"] = meta.get("default_branch") or cfg.get("branch", "master")
+        cfg["license"] = spdx  # keep measured state in sync for this process
+        _write_cache(cache, ts=now, paths=paths, dead=False, license_spdx=spdx)
         return paths
+    except RepoDeadError:
+        _write_cache(cache, ts=now, paths=stale or [], dead=True, license_spdx=None)
+        raise
     except FetchError:
         if stale is not None:
-            return stale
+            return stale  # rate limit / network hiccup: M2 stale fallback
         raise
 
 
@@ -113,10 +200,7 @@ class GithubBooks(Source):
     def search(self, query: str) -> list[Book]:
         books: list[Book] = []
         for cfg in _REPOS:
-            try:
-                paths = _repo_paths(cfg)
-            except FetchError:
-                raise  # surfaced via registry errors dict
+            paths = _repo_paths(cfg)  # RepoDeadError/FetchError → registry errors
             books.extend(_search_paths(paths, cfg, query))
         return books
 

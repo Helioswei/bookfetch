@@ -2,7 +2,8 @@
 name: bookfetch
 description: >-
   用户需要获取电子书/古籍/公版书/现代书（找书、搜书、下载整本书、转格式）时使用。
-  bookfetch 是按书种自动路由的电子书获取 CLI：ctext（中文古籍全文）、GitHub 古籍文本库、
+  bookfetch 是按书种自动路由的电子书获取 CLI：ctext（中文古籍全文）、GitHub 古籍文本库
+  （mymmsc/books + xiaopangxia 中医药 ~700 本，多仓聚合、license 标注、404 自动失效探活）、
   Wikisource 中/英公版书（含鲁迅等现代公版）、Gutenberg 英文公版 7 万+、libgen 探活镜像
   （英文现代书）。默认输出
   结构化 JSON（agent 友好），支持 txt/epub 输出、章节切分、可选繁转简。

@@ -117,6 +117,16 @@ bookfetch get ctext 727782 --out ./books --simplify
 - 测试 fixture 为各源页面/结构的极小样本，仅用于解析测试，来源记录见 tests/fixtures/README.md
 - 任何权利方认为本工具对某源的使用不妥，请提 issue，我们会调整或移除该源
 
+### GitHub 精选仓库 license 实测状态（2026-09-04 探活，repos API 逐仓核对）
+
+| 仓库 | 内容 | license 实测 | 使用提示 |
+|---|---|---|---|
+| `mymmsc/books` | 综合资料库（含公版古籍/国学 txt，★2641） | 无 license 文件 | 公版古籍 + 公开资料汇编，使用前自审 |
+| `xiaopangxia/TCM-Ancient-Books` | 中医药古籍文本 ~700 本（★1411） | 无 license 文件 | 古籍原文公版；转录/汇编权利状态不明，使用前自审 |
+
+> search 输出中每个 github 结果带 `license` 字段；无 license 的源标注"权利状态不明，使用前自审"。
+> 健康探活：仓库若 404（被删/转私有/改名），会在缓存中标记失效并在 search 的 errors 中明确报错，**不静默返回旧索引**。
+
 ## 开发与测试
 
 ```bash
@@ -132,7 +142,7 @@ uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 - [x] M4: wikisource 中/英公版源 + libgen 探活镜像链 + 白话注解 spike（2026-09-04 完成；白话注解判定放弃，见 PRD）
 - [x] M5: SKILL.md agent 外壳 + PyPI 发布（2026-09-04 完成：仓库已 public、PyPI bookfetch 0.3.0 已上传，安装链路端到端验证通过）
 - [x] M6: Gutenberg 英文公版源（2026-09-04 完成，许可头尾自动剥离；E2E《Alice's Adventures in Wonderland》txt/epub 全通）
-- [ ] M7: github 源多仓库化 + 搜索聚合（mymmsc/books 保留 + xiaopangxia 中医药等；含源 license 探测）
+- [x] M7: github 源多仓库化 + 搜索聚合（mymmsc/books + xiaopangxia 中医药 ~700 本；license 实测标注 + 404 死亡探活，2026-09-04 完成）
 - [ ] M8: 中文网文/小说镜像链 spike（1 天级，成则加源败则放弃）
 
 ## 许可

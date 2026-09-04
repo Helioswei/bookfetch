@@ -1,0 +1,326 @@
+{
+ "truncated": true,
+ "note": "fixture: 真实抓取 2026-09-04 前40项截断",
+ "tree": [
+  {
+   "path": "000-神农本草经.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "4141a7280495c802a40e2f5426b0cb921fe72d5e",
+   "size": 180115,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/4141a7280495c802a40e2f5426b0cb921fe72d5e"
+  },
+  {
+   "path": "001-吴普本草.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "b89f3241d800b5b8405c910e9ef16dacff5ff72c",
+   "size": 33026,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/b89f3241d800b5b8405c910e9ef16dacff5ff72c"
+  },
+  {
+   "path": "002-本草经集注.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "6453170ed9b6cd1f709ee273efe255a62eec6da9",
+   "size": 286136,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/6453170ed9b6cd1f709ee273efe255a62eec6da9"
+  },
+  {
+   "path": "003-新修本草.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "a21793d23e79992d7b0c2148f8bf61971ccd1160",
+   "size": 353923,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/a21793d23e79992d7b0c2148f8bf61971ccd1160"
+  },
+  {
+   "path": "004-食疗本草.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "fe60147bafcb4033e6523fe60e2c83292dadf029",
+   "size": 86275,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/fe60147bafcb4033e6523fe60e2c83292dadf029"
+  },
+  {
+   "path": "005-海药本草.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "a4d0c8fd82bcee68789cfecbf66ac853c80fb63b",
+   "size": 34300,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/a4d0c8fd82bcee68789cfecbf66ac853c80fb63b"
+  },
+  {
+   "path": "006-本草图经.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "15b68bb4366c3f084eccb1e699b52d94a856f8c6",
+   "size": 590597,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/15b68bb4366c3f084eccb1e699b52d94a856f8c6"
+  },
+  {
+   "path": "007-本草衍义.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "f69490b6f5c79c8731b277e5755669bef27a67e5",
+   "size": 133095,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/f69490b6f5c79c8731b277e5755669bef27a67e5"
+  },
+  {
+   "path": "008-汤液本草.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "16674d28ab3f0b56d35928e6f3de57714378ba26",
+   "size": 128210,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/16674d28ab3f0b56d35928e6f3de57714378ba26"
+  },
+  {
+   "path": "009-饮膳正要.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "07e8699a336924f2a49535088baefadb973a399c",
+   "size": 92911,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/07e8699a336924f2a49535088baefadb973a399c"
+  },
+  {
+   "path": "010-滇南本草.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "4b7ca1d23af0c1f55d83481952364139ca5dee58",
+   "size": 177673,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/4b7ca1d23af0c1f55d83481952364139ca5dee58"
+  },
+  {
+   "path": "011-本草品汇精要.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "ae37e2c6ceb239a653a242f8f37731fa7459abf2",
+   "size": 1293101,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/ae37e2c6ceb239a653a242f8f37731fa7459abf2"
+  },
+  {
+   "path": "012-本草蒙筌.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "7cbf03623971a6826350554c583befd66d1f2969",
+   "size": 335150,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/7cbf03623971a6826350554c583befd66d1f2969"
+  },
+  {
+   "path": "013-本草纲目.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "3c15ed8efd48c5342549baaaac301127df00b667",
+   "size": 3778207,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/3c15ed8efd48c5342549baaaac301127df00b667"
+  },
+  {
+   "path": "014-本草乘雅半偈.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "0287d79597492d8569a6504f69c93efc9410c9d7",
+   "size": 573583,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/0287d79597492d8569a6504f69c93efc9410c9d7"
+  },
+  {
+   "path": "015-本草征要.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "c4e8da4d0cfd826c47a9de1e252fcc809bae2c7e",
+   "size": 179611,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/c4e8da4d0cfd826c47a9de1e252fcc809bae2c7e"
+  },
+  {
+   "path": "016-本草易读.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "c6c531a6626642db7f8390518da49a133b82d50a",
+   "size": 461710,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/c6c531a6626642db7f8390518da49a133b82d50a"
+  },
+  {
+   "path": "017-本草新编.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "07bf1792c482868f9ea0196000702772ee1d3e7a",
+   "size": 415881,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/07bf1792c482868f9ea0196000702772ee1d3e7a"
+  },
+  {
+   "path": "018-本草备要.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "b128501e4545a76f4d441b384ef619e9d242379a",
+   "size": 293521,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/b128501e4545a76f4d441b384ef619e9d242379a"
+  },
+  {
+   "path": "019-本经逢原.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "4cbf095e21d0cce8a76ce90c5d339579bffb9b32",
+   "size": 388947,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/4cbf095e21d0cce8a76ce90c5d339579bffb9b32"
+  },
+  {
+   "path": "020-本草经解.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "21dc582ece9d7960c25707deff41f0e23314b58c",
+   "size": 155490,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/21dc582ece9d7960c25707deff41f0e23314b58c"
+  },
+  {
+   "path": "021-本草从新.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "d03355af596c5f12ba5c1a5d422cdbd019d7b056",
+   "size": 378134,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/d03355af596c5f12ba5c1a5d422cdbd019d7b056"
+  },
+  {
+   "path": "022-神农本草经百种录.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "b1d8522d4e0bfaa06693f857db98c2038776c3a8",
+   "size": 48387,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/b1d8522d4e0bfaa06693f857db98c2038776c3a8"
+  },
+  {
+   "path": "023-本草纲目拾遗.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "614918e85d8cb4471870a924358d65bad1151717",
+   "size": 518608,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/614918e85d8cb4471870a924358d65bad1151717"
+  },
+  {
+   "path": "024-本草崇原.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "a8d63110dff24ad96a50629f86198cecbafcbd21",
+   "size": 203670,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/a8d63110dff24ad96a50629f86198cecbafcbd21"
+  },
+  {
+   "path": "025-本草求真.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "f876383ef37f56f6e3579077098c4bdbe83fc955",
+   "size": 560268,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/f876383ef37f56f6e3579077098c4bdbe83fc955"
+  },
+  {
+   "path": "026-神农本草经读.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "faaae7a27c953c20af4e75318558e254e7183a55",
+   "size": 93693,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/faaae7a27c953c20af4e75318558e254e7183a55"
+  },
+  {
+   "path": "027-本草述钩元.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "1d55f6486dc3c40c16cc223a8415f938d7aba734",
+   "size": 796778,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/1d55f6486dc3c40c16cc223a8415f938d7aba734"
+  },
+  {
+   "path": "028-食鉴本草.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "915141d90f8c54e3636c45bb8adde976cf986075",
+   "size": 25205,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/915141d90f8c54e3636c45bb8adde976cf986075"
+  },
+  {
+   "path": "029-本草思辨录.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "0d92211cebd63c63fd00ced8b8a8afed6b84b5bd",
+   "size": 210910,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/0d92211cebd63c63fd00ced8b8a8afed6b84b5bd"
+  },
+  {
+   "path": "030-本草纲目别名录.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "4826bafbf5cf1cebd569243240507b48bbda1e27",
+   "size": 33728,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/4826bafbf5cf1cebd569243240507b48bbda1e27"
+  },
+  {
+   "path": "031-本草便读.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "07fdf04de2e9da3c25a456c161c505ad6d36e288",
+   "size": 182740,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/07fdf04de2e9da3c25a456c161c505ad6d36e288"
+  },
+  {
+   "path": "032-本草撮要.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "49277d2af337c33262c1e83bfd2935164f1fe3dc",
+   "size": 134890,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/49277d2af337c33262c1e83bfd2935164f1fe3dc"
+  },
+  {
+   "path": "033-本草问答.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "25cbd5decfbbadad2f3e2716cd367cabcc5e75db",
+   "size": 80462,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/25cbd5decfbbadad2f3e2716cd367cabcc5e75db"
+  },
+  {
+   "path": "034-神农本草经赞.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "e316c752eb49cad79429a40ec7ecc0ebab3bbd06",
+   "size": 177182,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/e316c752eb49cad79429a40ec7ecc0ebab3bbd06"
+  },
+  {
+   "path": "035-本草择要纲目.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "0a4cc0fd010115202cdc46efd41b523ba4d1b6f1",
+   "size": 146814,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/0a4cc0fd010115202cdc46efd41b523ba4d1b6f1"
+  },
+  {
+   "path": "036-得配本草.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "9ed745545d5003a7a707fc8705f1fdf45a802657",
+   "size": 242486,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/9ed745545d5003a7a707fc8705f1fdf45a802657"
+  },
+  {
+   "path": "037-本草害利.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "60c5503e87d2230e286f7ec0dd1dd2f4479115a3",
+   "size": 133006,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/60c5503e87d2230e286f7ec0dd1dd2f4479115a3"
+  },
+  {
+   "path": "038-本草分经.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "29a93b2349cc3613c4219c033197b4d4c0d056c2",
+   "size": 146141,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/29a93b2349cc3613c4219c033197b4d4c0d056c2"
+  },
+  {
+   "path": "039-雷公炮炙论.txt",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "27a7221b206059547517805b7148fd4ca949740f",
+   "size": 59371,
+   "url": "https://api.github.com/repos/xiaopangxia/TCM-Ancient-Books/git/blobs/27a7221b206059547517805b7148fd4ca949740f"
+  }
+ ]
+}
