@@ -16,6 +16,7 @@ def env(tmp_path, monkeypatch):
     cfg = tmp_path / "cfg"
     monkeypatch.setenv("BOOKFETCH_LIBRARY", str(lib))
     monkeypatch.setenv("BOOKFETCH_CACHE", str(cache))
+    monkeypatch.setattr(n2core, "_CFG_DIR", cfg)  # module-level; env var too late
     monkeypatch.setattr(n2core, "_PROGRESS", cfg / "progress.json")
     return tmp_path
 
@@ -81,6 +82,28 @@ def test_open_own_epub_roundtrip(env):
 
 
 # ------------------------------------------------------------- progress ---
+
+def test_proxy_settings_roundtrip(env):
+    """settings_set persists + applies; settings_get reads back (D1 addendum)."""
+    from bookfetch import util as _u
+    from bookfetch.util import set_proxy
+
+    r = n2core.settings_set({"mode": "manual", "url": "http://127.0.0.1:9999"})
+    assert r["ok"]
+    assert n2core.settings_get()["proxy"] == {"mode": "manual", "url": "http://127.0.0.1:9999"}
+    assert _u._PROXY_MODE == "manual" and _u._PROXY_URL == "http://127.0.0.1:9999"
+    # corrupt file -> graceful defaults
+    (env / "cfg" / "settings.json").write_text("{not json", encoding="utf-8")
+    assert n2core.settings_get()["proxy"] == {"mode": "system", "url": ""}
+    # invalid mode rejected
+    try:
+        n2core.settings_set({"mode": "warp"})
+        assert False, "invalid mode must raise"
+    except ValueError:
+        pass
+    n2core.settings_set({"mode": "system"})
+    set_proxy("system")
+
 
 def test_progress_roundtrip(env):
     _write_book(env, "甲书", [Chapter("卷一", "内容一")])

@@ -42,6 +42,7 @@ def run(debug: bool = False) -> int:
     from .logging_setup import setup_logging
 
     setup_logging(n2core.config_dir())  # idempotent; CLI main also calls it
+    n2core.apply_proxy()  # idempotent; persisted proxy from the settings panel
 
     # localhost-only server on a random free port; frontend talks to it over
     # plain http (same code path as `bookfetch serve`, fully exercised).

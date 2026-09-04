@@ -46,6 +46,57 @@ def config_dir() -> Path:
     return _CFG_DIR
 
 
+def load_settings() -> dict:
+    """settings.json in the config dir; missing/corrupt -> {}."""
+    try:
+        return json.loads((config_dir() / "settings.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def save_settings(s: dict) -> None:
+    d = config_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "settings.json").write_text(
+        json.dumps(s, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def settings_get() -> dict:
+    """Proxy config for the settings panel (D1 addendum)."""
+    p = load_settings().get("proxy") or {}
+    return {"proxy": {"mode": p.get("mode", "system"), "url": p.get("url", "")}}
+
+
+def settings_set(proxy: dict) -> dict:
+    """Persist proxy settings and apply them to the next request."""
+    mode = proxy.get("mode", "system")
+    url = str(proxy.get("url", "")).strip()
+    if mode not in ("system", "manual", "none"):
+        raise ValueError(f"invalid proxy mode: {mode!r}")
+    if mode == "manual" and not url:
+        raise ValueError("manual proxy mode requires a proxy url")
+    s = load_settings()
+    s["proxy"] = {"mode": mode, "url": url}
+    save_settings(s)
+    apply_proxy()
+    return {"ok": True, "proxy": {"mode": mode, "url": url}}
+
+
+def apply_proxy() -> None:
+    """Push the persisted proxy settings into util (startup + after save)."""
+    from .util import set_proxy
+
+    p = load_settings().get("proxy") or {}
+    mode = p.get("mode", "system")
+    if mode == "manual" and p.get("url"):
+        set_proxy("manual", str(p["url"]))
+    elif mode == "none":
+        set_proxy("none")
+    else:
+        set_proxy("system")
+
+
 def friendly(exc: BaseException) -> str:
     """Map an internal exception to a short user-facing Chinese message.
 
@@ -405,10 +456,15 @@ def api_call(name: str, params: dict) -> dict:
         return {"library": str(library_dir())}
     if name == "sources":
         return {"sources": source_catalog()}
+    if name == "settings_get":
+        return settings_get()
+    if name == "settings_set":
+        return settings_set(params.get("proxy") or {})
     raise ValueError(f"unknown api: {name}")
 
 
 BUILTIN_API = {
     "search", "download", "cancel", "task_status", "shelf", "open_book",
     "chapter", "progress_get", "progress_set", "library", "sources",
+    "settings_get", "settings_set",
 }

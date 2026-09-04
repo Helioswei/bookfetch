@@ -148,6 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     from .logging_setup import setup_logging
 
     setup_logging(n2core.config_dir())  # all subcommands log to bookfetch.log
+    n2core.apply_proxy()  # persisted proxy settings (settings panel)
     try:
         if args.cmd == "serve":
             from .server import serve as _serve

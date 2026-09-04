@@ -14,8 +14,31 @@
     <button id="tab-search" class="tab active" data-view="search">搜索</button>
     <button id="tab-shelf" class="tab" data-view="shelf">书架</button>
     <button id="tab-theme" class="ghost-btn" title="切换明暗">🌗</button>
+    <button id="tab-settings" class="ghost-btn" title="设置">⚙</button>
   </nav>
 </header>
+
+<!-- 设置面板（网络代理） -->
+<div id="settings-modal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <span class="modal-title">设置</span>
+      <button class="modal-x" title="关闭">✕</button>
+    </div>
+    <div class="field">
+      <div class="field-label">网络代理</div>
+      <p class="field-hint">被墙书源（wikisource / libgen）需要代理才能访问。「跟随系统」= 自动使用 macOS 系统代理（Clash 等开着「系统代理」开关即可）。</p>
+      <label class="radio-row"><input type="radio" name="proxy-mode" value="system" checked/> 跟随系统（默认）</label>
+      <label class="radio-row"><input type="radio" name="proxy-mode" value="manual"/> 手动代理</label>
+      <label class="radio-row"><input type="radio" name="proxy-mode" value="none"/> 直连（不走任何代理）</label>
+      <input id="proxy-url" type="text" placeholder="http://127.0.0.1:7897" class="proxy-url"/>
+    </div>
+    <div class="modal-foot">
+      <span id="settings-msg" class="muted"></span>
+      <button id="settings-save" class="primary">保存</button>
+    </div>
+  </div>
+</div>
 
 <main class="container-fluid">
   <!-- ============ 搜索视图 ============ -->

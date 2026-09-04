@@ -14,6 +14,46 @@ UA = (
 # Polite per-host pacing: some sources (ctext) block clients that hammer them.
 _MIN_INTERVAL = 2.0
 _last_request: dict[str, float] = {}
+
+# ---- runtime proxy (D1: settings panel) ---------------------------------
+# mode "system" = follow env vars + macOS system proxy (urllib default);
+# mode "manual" = route everything through url; mode "none" = direct only.
+_PROXY_MODE = "system"
+_PROXY_URL = ""
+_OPENER: urllib.request.OpenerDirector | None = None
+
+
+def set_proxy(mode: str = "system", url: str = "") -> None:
+    """Switch the process-wide proxy behaviour. Applies to the next request.
+
+    mode: "system" (default: env + macOS system proxy), "manual" (route all
+    HTTP(S) through ``url``), or "none" (direct connection).
+    """
+    global _PROXY_MODE, _PROXY_URL, _OPENER
+    if mode not in ("system", "manual", "none"):
+        raise ValueError(f"invalid proxy mode: {mode!r}")
+    if mode == "manual" and not url:
+        raise ValueError("manual proxy mode requires a proxy url")
+    _PROXY_MODE, _PROXY_URL = mode, url
+    _OPENER = None  # rebuilt lazily with the new settings
+
+
+def _opener() -> urllib.request.OpenerDirector:
+    global _OPENER
+    if _OPENER is None:
+        if _PROXY_MODE == "manual":
+            handler = urllib.request.ProxyHandler(
+                {"http": _PROXY_URL, "https": _PROXY_URL}
+            )
+            _OPENER = urllib.request.build_opener(handler)
+        elif _PROXY_MODE == "none":
+            # Empty ProxyHandler bypasses env + system proxies entirely.
+            _OPENER = urllib.request.build_opener(
+                urllib.request.ProxyHandler({})
+            )
+        else:
+            _OPENER = urllib.request.build_opener()  # env + macOS system proxy
+    return _OPENER
 _max_retries = 3
 
 
@@ -93,7 +133,7 @@ def fetch_bytes(url: str, *, timeout: float = 30.0, retries: int = _max_retries)
         _pace(host)
         req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9"})
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with _opener().open(req, timeout=timeout) as resp:
                 return resp.read()
         except urllib.error.HTTPError as e:
             last_err = e

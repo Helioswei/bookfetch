@@ -157,6 +157,51 @@ $('#search-results').addEventListener('click', (e) => {
   addTask(b, btn.dataset.fmt);
 });
 
+/* ---------- 设置（网络代理，D1 addendum） ---------- */
+const $settingsModal = () => $('#settings-modal');
+$('#tab-settings').addEventListener('click', openSettings);
+
+async function openSettings() {
+  try {
+    const r = await BF.api('settings_get', {});
+    const p = (r.proxy || {});
+    document.querySelectorAll('input[name="proxy-mode"]').forEach((el) => {
+      el.checked = el.value === (p.mode || 'system');
+    });
+    $('#proxy-url').value = p.url || '';
+    $('#proxy-url').disabled = (p.mode || 'system') !== 'manual';
+  } catch { /* 保持默认值 */ }
+  $settingsModal().classList.remove('hidden');
+}
+
+document.querySelectorAll('input[name="proxy-mode"]').forEach((el) => {
+  el.addEventListener('change', () => {
+    $('#proxy-url').disabled = el.value !== 'manual';
+    if (el.value === 'manual' && !$('#proxy-url').value) {
+      $('#proxy-url').value = 'http://127.0.0.1:7897';
+    }
+  });
+});
+$settingsModal().querySelector('.modal-x').addEventListener('click', () => $settingsModal().classList.add('hidden'));
+$('#settings-save').addEventListener('click', async () => {
+  const mode = document.querySelector('input[name="proxy-mode"]:checked').value;
+  const url = $('#proxy-url').value.trim();
+  const msg = $('#settings-msg');
+  msg.textContent = '';
+  try {
+    await BF.api('settings_set', { proxy: { mode, url } });
+    msg.textContent = '已保存，对之后的请求生效';
+    msg.classList.add('ok');
+    setTimeout(() => { msg.textContent = ''; msg.classList.remove('ok'); $settingsModal().classList.add('hidden'); }, 1200);
+  } catch (e) {
+    msg.textContent = '保存失败：' + (e.message || '');
+    msg.classList.add('err');
+  }
+});
+$settingsModal().addEventListener('click', (e) => {
+  if (e.target === $settingsModal()) $settingsModal().classList.add('hidden');  // 点遮罩关闭
+});
+
 /* ---------- 下载任务面板 ---------- */
 const _finished = { n: 0 };
 

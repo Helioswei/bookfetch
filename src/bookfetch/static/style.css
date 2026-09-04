@@ -323,6 +323,35 @@ body[data-reader-dark="1"] {
 .task.err .t-ops .mini.retry { border-color: var(--err); color: var(--err); }
 .task.cancelled .t-msg { color: var(--ink-3); }
 
+/* ---------- 设置模态（网络代理） ---------- */
+.modal {
+  position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+  background: rgba(30, 22, 8, .45);
+}
+.modal-card {
+  width: 420px; max-width: 92vw; background: var(--paper-card);
+  border: 1px solid var(--line-2); border-radius: 14px; padding: 1.1rem 1.3rem;
+  box-shadow: 0 18px 50px -12px rgba(40, 30, 10, .5);
+}
+.modal-head { display: flex; align-items: center; margin-bottom: .7rem; }
+.modal-title { font-weight: 700; font-size: 1rem; letter-spacing: .08em; color: var(--ink); }
+.modal-x { margin-left: auto; border: none; background: none; cursor: pointer; color: var(--ink-3); font-size: .95rem; }
+.modal-x:hover { color: var(--seal); }
+.field-label { font-size: .88rem; font-weight: 600; color: var(--ink-2); margin-bottom: .3rem; }
+.field-hint { font-size: .76rem; color: var(--ink-3); line-height: 1.5; margin: 0 0 .6rem; }
+.radio-row { display: block; font-size: .85rem; color: var(--ink-2); padding: .22rem 0; cursor: pointer; }
+.radio-row input { margin-right: .4rem; accent-color: var(--seal); }
+.proxy-url { margin-top: .5rem; width: 100%; box-sizing: border-box; padding: .42rem .7rem; font-size: .85rem;
+  border: 1px solid var(--line-2); border-radius: 8px; background: var(--paper-well); color: var(--ink); }
+.proxy-url:disabled { opacity: .45; }
+.modal-foot { display: flex; align-items: center; gap: .6rem; margin-top: .9rem; }
+.modal-foot .muted { font-size: .78rem; flex: 1; }
+.modal-foot .muted.ok { color: var(--ok); }
+.modal-foot .muted.err { color: var(--err); }
+.modal-foot button.primary { border: none; background: var(--seal); color: #f6f1e7;
+  border-radius: 8px; padding: .4rem 1.1rem; font-size: .85rem; cursor: pointer; }
+.modal-foot button.primary:hover { opacity: .92; }
+
 /* 滚动条细雅 */
 ::-webkit-scrollbar { width: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; border: 2px solid transparent; background-clip: content-box; }
