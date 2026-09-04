@@ -171,9 +171,11 @@ _EPUB_EXT = (".epub",)
 
 
 def shelf() -> dict:
-    """Scan the library dir for books: [{rel, title, format, size_kb}]."""
+    """Scan the library dir for books, each with reading progress:
+    [{rel, title, format, size_kb, progress:{chapter,pct}|None}]."""
     root = library_dir()
     books = []
+    prog = _load_progress()
     for p in sorted(root.rglob("*")):
         if not p.is_file() or p.name.startswith("."):
             continue
@@ -185,6 +187,7 @@ def shelf() -> dict:
                     "title": p.stem,
                     "format": p.suffix.lower().lstrip("."),
                     "size_kb": max(1, p.stat().st_size // 1024),
+                    "progress": prog.get(rel) or None,
                 }
             )
     return {"library": str(root), "books": books}

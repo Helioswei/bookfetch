@@ -154,6 +154,7 @@ uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 - [x] N1: 已下载去重（yt-dlp archive 模式，2026-09-04 完成：fetch 层缓存 source:id → 命中零网络重渲染；txt/epub 互认；--force 重下）
 - [x] N2 前端+serve（2026-09-04 完成：`bookfetch serve` 浏览器 UI——搜索/书架/阅读器三视图；下载逻辑与 CLI 共用同一套 fetch_cache+渲染内核；n2core API 层 serve 与桌面壳共用；全源并行搜索每源 20s 超时）
 - [x] N2 壳（2026-09-04 完成：`bookfetch gui` pywebview 桌面窗口——指向内嵌 localhost HTTP，前端零改动；实测窗口渲染 + 8 源标签 + 键盘输入全通）
+- [x] UI「书卷宣纸」主题 + mac .app 打包（2026-09-04 完成：宣纸暖底/墨字/朱红/「藏」印三视图定稿实拍验收；书架行式+续读进度条；hash 深链 `#shelf` `#reader/书名`；`packaging/desktop_entry.py` + PyInstaller → `dist/bookfetch.app` 31MB 实测启动渲染 ✓）
 - [ ] N3 翻译（待做）
 
 ## 许可

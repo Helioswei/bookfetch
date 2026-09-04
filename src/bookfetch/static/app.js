@@ -60,6 +60,7 @@ function showView(name) {
   else $('#view-' + name).classList.remove('hidden');
   document.querySelectorAll('.tab').forEach((t) =>
     t.classList.toggle('active', t.dataset.view === name));
+  if (name !== 'reader') history.replaceState(null, '', '#' + name); // 深链可刷
   if (name === 'shelf') loadShelf();
 }
 
@@ -127,9 +128,9 @@ function bookCard(b, i) {
   const lic = (b.extra && b.extra.license) ? `<span class="badge warn" title="${esc(b.extra.license)}">⚠️ 使用前自审</span>` : '';
   const isRaw = !!(b.extra && (b.extra.extension || b.extra.raw));
   const btn = isRaw
-    ? '<button data-act="dl" data-i="' + i + '" data-fmt="">下载原文件</button>'
-    : `<button data-act="dl" data-i="${i}" data-fmt="txt">下载 txt</button>
-       <button data-act="dl" data-i="${i}" data-fmt="epub" class="outline">下载 epub</button>`;
+    ? '<button data-act="dl" data-i="' + i + '" data-fmt="" class="dl" title="下载原文件">原文件</button>'
+    : `<button data-act="dl" data-i="${i}" data-fmt="txt" title="下载 txt">txt</button>
+       <button data-act="dl" data-i="${i}" data-fmt="epub" class="epub" title="下载 epub">epub</button>`;
   return `
   <div class="card">
     <h3>${esc(b.title)}</h3>
@@ -199,16 +200,26 @@ async function loadShelf() {
     return;
   }
   $('#shelf-empty').classList.add('hidden');
-  $('#shelf-books').innerHTML = r.books.map((b) => `
-    <div class="card book-card" data-rel="${esc(b.rel)}">
-      <h3>${esc(b.title)}</h3>
-      <div class="badges"><span class="badge">${esc(b.format)}</span>
-        <span class="badge">${b.size_kb} KB</span></div>
-    </div>`).join('');
+  $('#shelf-books').innerHTML = r.books.map((b) => {
+    const pg = b.progress;
+    let bar = '', pos = '<span class="pos">未读</span>';
+    if (pg) {
+      const ch = (pg.chapter ?? 0) + 1;
+      const pp = Math.min(100, Math.max(1, Math.round((pg.pct || 0) / 10)));
+      bar = `<span class="prog"><i style="width:${pp}%"></i></span>`;
+      pos = `<span class="pos">第 ${ch} 章 · ${pp}%</span>`;
+    }
+    return `
+    <div class="book-row" data-rel="${esc(b.rel)}" title="${esc(b.title)}">
+      <span class="t">${esc(b.title)}</span>
+      <span class="fmt">${esc(b.format)} · ${b.size_kb} KB</span>
+      ${bar}${pos}
+    </div>`;
+  }).join('');
 }
 $('#shelf-books').addEventListener('click', (e) => {
-  const card = e.target.closest('.book-card');
-  if (card) openReader(card.dataset.rel);
+  const row = e.target.closest('.book-row');
+  if (row) openReader(row.dataset.rel);
 });
 $('#empty-go-search').addEventListener('click', (e) => { e.preventDefault(); showView('search'); });
 
@@ -335,6 +346,18 @@ window.addEventListener('beforeunload', () => saveProgress());
     if (d === '1') { state.readerDark = true; document.body.dataset.readerDark = '1'; $('#reader-theme').textContent = '☀️'; }
     const t = localStorage.getItem('bf-theme');
     if (t) document.documentElement.dataset.theme = t;
+    // URL 参数覆盖（?theme=dark / ?rdark=1）：预览与截图用
+    const q = new URLSearchParams(location.search);
+    if (q.get('theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+    if (q.get('rdark') === '1') { document.body.dataset.readerDark = '1'; $('#reader-theme').textContent = '☀️'; }
   } catch {}
   loadSources();
+  // 深链/刷新恢复：`#shelf` / `#reader/<rel>` 直达视图
+  const m = (location.hash || '').match(/^#reader\/(.+)$/);
+  if (m) openReader(decodeURIComponent(m[1]));
+  else if (location.hash === '#shelf') showView('shelf');
 })();
+window.addEventListener('hashchange', () => {
+  const h = location.hash || '';
+  if (h === '#search' || h === '#shelf') showView(h.slice(1));
+});

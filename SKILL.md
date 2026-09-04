@@ -66,6 +66,13 @@ bookfetch serve --no-browser --port 9000   # 不开浏览器/改端口（远程�
 uv sync --extra gui              # 首次需装 gui 依赖
 bookfetch gui                    # 桌面窗口（书库 ~/Books）
 
+# 打包 mac .app（PyInstaller；dist/ 已 gitignore）
+uv run pyinstaller --noconfirm --clean --windowed --name bookfetch \
+  --collect-all webview --add-data "src/bookfetch/static:bookfetch/static" \
+  packaging/desktop_entry.py
+# 产物 dist/bookfetch.app（31MB，实测启动渲染正常；首启 WebKit 冷启动约 15s）
+# Windows exe 需在 GitHub Actions CI 上打（本机 mac 打不了 Windows 包）
+
 ## 源路由表
 
 | source | 内容 | id 形态 | 大陆直连 |
