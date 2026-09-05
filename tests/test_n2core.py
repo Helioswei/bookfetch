@@ -797,7 +797,8 @@ def _patch_sources(monkeypatch, fakes: dict):
 
 
 def test_search_hint_cjk_foreign_zero_results(monkeypatch):
-    """中文 query + 外文源全 0（但正常执行）→ hint 引导试英文原名。"""
+    """中文 query + 外文源全 0（翻译不可用）→ hint 引导试英文原名。"""
+    monkeypatch.setattr(n2core, "_translate_book_title", lambda q: (None, None))
     _patch_sources(monkeypatch, {
         "gutenberg": _SearchSrc("gutenberg"),
         "wikisource-en": _SearchSrc("wikisource-en"),
@@ -806,20 +807,56 @@ def test_search_hint_cjk_foreign_zero_results(monkeypatch):
     r = n2core.search("傲慢与偏见", sources=["gutenberg", "wikisource-en", "biquge"])
     assert r["count"] == 1
     assert "英文" in r["hint"]
+    assert r["translated"] is None
+
+
+def test_search_translates_title_for_foreign_sources(monkeypatch):
+    """方案 B：中文书名自动 zh2en，外文源收到英文名（透明标注 translated）。"""
+    got = {}
+
+    class _RecSrc(_SearchSrc):
+        def search(self, query):
+            got[self.name] = query
+            return super().search(query)
+
+    monkeypatch.setattr(n2core, "_translate_book_title", lambda q: ("Pride and Prejudice", "mt"))
+    _patch_sources(monkeypatch, {
+        "gutenberg": _RecSrc("gutenberg", hits=[_book("gutenberg", "Pride and Prejudice")]),
+        "biquge": _RecSrc("biquge", hits=[_book("biquge", "同人")]),
+    })
+    r = n2core.search("傲慢与偏见", sources=["gutenberg", "biquge"])
+    assert got["gutenberg"] == "Pride and Prejudice"  # 外文源收到英文名
+    assert got["biquge"] == "傲慢与偏见"  # 中文源收到原 query
+    assert r["translated"] == {"from": "傲慢与偏见", "to": "Pride and Prejudice", "via": "mt"}
+    assert r["hint"] == ""  # 外文源有命中不提示
+
+
+def test_search_hint_mentions_translated_name_when_still_zero(monkeypatch):
+    """翻译了但外文源仍 0（直译不精确场景）→ hint 带上实际译名引导手动搜。"""
+    monkeypatch.setattr(n2core, "_translate_book_title", lambda q: ("One hundred years of loneliness", "mt"))
+    _patch_sources(monkeypatch, {
+        "gutenberg": _SearchSrc("gutenberg"),
+    })
+    r = n2core.search("百年孤独", sources=["gutenberg"])
+    assert "loneliness" in r["hint"]
+    assert r["translated"]["to"] == "One hundred years of loneliness"
 
 
 def test_search_no_hint_ascii_query(monkeypatch):
     """英文 query 不触发提示（英文用户/agent 无此困惑）。"""
+    monkeypatch.setattr(n2core, "_translate_book_title", lambda q: (None, None))
     _patch_sources(monkeypatch, {
         "gutenberg": _SearchSrc("gutenberg"),
         "biquge": _SearchSrc("biquge", hits=[_book("biquge", "x")]),
     })
     r = n2core.search("Pride and Prejudice", sources=["gutenberg", "biquge"])
     assert r["hint"] == ""
+    assert r["translated"] is None
 
 
 def test_search_no_hint_when_foreign_has_hits(monkeypatch):
     """外文源有命中 → 无需提示。"""
+    monkeypatch.setattr(n2core, "_translate_book_title", lambda q: (None, None))
     _patch_sources(monkeypatch, {
         "gutenberg": _SearchSrc("gutenberg", hits=[_book("gutenberg", "Pride and Prejudice")]),
     })
@@ -829,6 +866,7 @@ def test_search_no_hint_when_foreign_has_hits(monkeypatch):
 
 def test_search_no_hint_when_all_foreign_down(monkeypatch):
     """外文源全故障（报错）→ 不提示（避免误导：源本身不可用时提示搜英文名无意义）。"""
+    monkeypatch.setattr(n2core, "_translate_book_title", lambda q: (None, None))
     _patch_sources(monkeypatch, {
         "gutenberg": _SearchSrc("gutenberg", err=RuntimeError("boom")),
         "biquge": _SearchSrc("biquge", hits=[_book("biquge", "x")]),
@@ -836,3 +874,74 @@ def test_search_no_hint_when_all_foreign_down(monkeypatch):
     r = n2core.search("傲慢与偏见", sources=["gutenberg", "biquge"])
     assert r["hint"] == ""
     assert "gutenberg" in r["errors"]
+
+
+def test_title_translate_unavailable_returns_none(monkeypatch):
+    """非 macOS（翻译不可用）→ 表外书名翻译返回 None（走 hint），不抛错不阻塞。"""
+    monkeypatch.setattr(n2core, "translate_available", lambda: False)
+    assert n2core._translate_book_title("一本不在表里的测试书") == (None, None)
+
+
+def test_title_translate_rejects_non_latin_result(monkeypatch):
+    """翻译结果仍是中文（系统没翻动）→ None，绝不拿中文去搜英文源。"""
+    monkeypatch.setattr(n2core, "translate_available", lambda: True)
+    monkeypatch.setattr(
+        n2core, "translate_paragraphs",
+        lambda texts, direction="en2zh": ["一本不在表里的测试书"],  # 原样返回=没翻动
+    )
+    assert n2core._translate_book_title("一本不在表里的测试书") == (None, None)
+
+
+def test_title_translate_caches_english_result(monkeypatch, tmp_path):
+    """表外书名成功翻译 → 落盘缓存；二次调用读缓存不再调桥。"""
+    monkeypatch.setattr(n2core, "_TR_CACHE_DIR", tmp_path / "trcache")
+    calls = []
+
+    def _fake_tr(texts, direction="en2zh"):
+        calls.append(texts)
+        return ["The Unnamed Test Book"]
+
+    monkeypatch.setattr(n2core, "translate_available", lambda: True)
+    monkeypatch.setattr(n2core, "translate_paragraphs", _fake_tr)
+    assert n2core._translate_book_title("一本不在表里的测试书") == ("The Unnamed Test Book", "mt")
+    assert len(calls) == 1
+    # 二次调用：缓存命中，桥零调用
+    assert n2core._translate_book_title("一本不在表里的测试书") == ("The Unnamed Test Book", "mt")
+    assert len(calls) == 1
+
+
+def test_title_translate_dict_hit_skips_bridge(monkeypatch):
+    """方案 A：词典命中直接返回标准英文名（via=dict），翻译桥零调用——全平台一致。"""
+    def _boom(*a, **k):
+        raise AssertionError("词典命中不应触碰翻译桥")
+
+    monkeypatch.setattr(n2core, "translate_available", _boom)
+    monkeypatch.setattr(n2core, "translate_paragraphs", _boom)
+    # 变体「傲慢和偏见」也在表内（系统直译会给出 Arrogance and prejudice 歪名）
+    assert n2core._translate_book_title("傲慢和偏见") == ("Pride and Prejudice", "dict")
+    assert n2core._translate_book_title("傲慢与偏见") == ("Pride and Prejudice", "dict")
+
+
+def test_search_uses_dict_title_for_foreign_sources(monkeypatch):
+    """端到端：搜「傲慢和偏见」（表内变体）→ 外文源直接收到标准英文名 Pride and Prejudice。"""
+    got = {}
+
+    class _RecSrc(_SearchSrc):
+        def search(self, query):
+            got[self.name] = query
+            return super().search(query)
+
+    def _boom(*a, **k):
+        raise AssertionError("表内书名不应触碰翻译桥")
+
+    monkeypatch.setattr(n2core, "translate_available", _boom)
+    monkeypatch.setattr(n2core, "translate_paragraphs", _boom)
+    _patch_sources(monkeypatch, {
+        "gutenberg": _RecSrc("gutenberg", hits=[_book("gutenberg", "Pride and Prejudice")]),
+        "biquge": _RecSrc("biquge", hits=[_book("biquge", "同人")]),
+    })
+    r = n2core.search("傲慢和偏见", sources=["gutenberg", "biquge"])
+    assert got["gutenberg"] == "Pride and Prejudice"  # 词典直接给标准英文名
+    assert got["biquge"] == "傲慢和偏见"  # 中文源收到原 query
+    assert r["translated"] == {"from": "傲慢和偏见", "to": "Pride and Prejudice", "via": "dict"}
+    assert r["hint"] == ""

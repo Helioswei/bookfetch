@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import fetch_cache
+from .book_titles import _CN_TO_EN
 from .cli import _ensure_chapters, _render_get
 from .model import Book, Chapter, FetchResult
 from .sources import get_source, source_catalog, source_names
@@ -156,6 +157,49 @@ _FOREIGN_SOURCES = frozenset({"gutenberg", "wikisource-en", "libgen"})
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 
 
+def _translate_book_title(query: str) -> tuple[str, str] | tuple[None, None]:
+    """中文书名 → 英文（方案 A + B：先查高频书名词典，未命中走翻译桥）。
+
+    返回 (英文名, via) 二元组；via="dict" 词典命中 / "mt" 机器翻译 / None 不可用。
+    调用方拆包；旧测试兼容点：直接断言返回值时注意已是二元组。
+
+    方案 A：book_titles._CN_TO_EN 命中 → 直接取标准英文名，全平台一致、
+    零延迟、不依赖翻译桥（傲慢和偏见 → Pride and Prejudice；系统直译会给出
+    Arrogance and prejudice 这类歪名——2026-09-05 实测）。
+    方案 B：表外书名复用 N3 翻译统一接口（util.translator：darwin = macOS
+    系统翻译桥；Windows/Linux 等 N3 V2 在线 provider 落地后同一接口自动
+    获得，搜索侧零改动）。失败/译文仍是中文 → None（调用方走 hint 引导）。
+    磁盘缓存（_TR_CACHE_DIR 同目录，`t-` 前缀防与章翻译缓存串）。
+    """
+    hit = _CN_TO_EN.get(query)
+    if hit:
+        return hit, "dict"
+    key = hashlib.sha1(f"title|{query}".encode("utf-8")).hexdigest()
+    cf = _TR_CACHE_DIR / f"t-{key}.json"
+    try:
+        if cf.exists():
+            en = json.loads(cf.read_text(encoding="utf-8"))
+            if isinstance(en, str) and en and not _CJK_RE.search(en):
+                return en, "mt"
+    except Exception:
+        pass  # 缓存损坏 = miss 重翻
+    if not translate_available():
+        return None, None
+    try:
+        out = translate_paragraphs([query], direction="zh2en")
+    except Exception:
+        return None, None  # 桥缺失/语言包未装/超时 → 不阻塞搜索，走 hint
+    en = (out[0] if out and out[0] else "").strip()
+    if not en or _CJK_RE.search(en):
+        return None, None  # 没翻动/译文仍是中文 → 不能拿中文去搜英文源
+    try:
+        _TR_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cf.write_text(json.dumps(en, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+    return en, "mt"
+
+
 def search(query: str, sources: list[str] | None = None, limit: int = 30) -> dict:
     """Search across sources in parallel (GUI: a slow/dead source must not
     stall the whole grid; CLI keeps its own serial search_all)."""
@@ -163,13 +207,23 @@ def search(query: str, sources: list[str] | None = None, limit: int = 30) -> dic
     out: list[dict] = []
     errors: dict[str, str] = {}
 
+    # 方案 A + B：中文书名且本次含外文源 → 先查高频书名词典（A），未命中
+    # 走统一翻译接口（B：darwin 系统翻译桥；其余平台等 N3 V2 provider——
+    # 同一接口，搜索侧零改动）。外文源用得到的英文名检索。
+    translated: dict | None = None
+    if _CJK_RE.search(query) and any(n in _FOREIGN_SOURCES for n in names):
+        en, via = _translate_book_title(query)
+        if en:
+            translated = {"from": query, "to": en, "via": via}
+
     def _one(n: str) -> None:
         src = get_source(n)
         if src is None:
             errors[n] = "unknown source"
             return
         try:
-            for b in src.search(query):
+            q = translated["to"] if (translated and n in _FOREIGN_SOURCES) else query
+            for b in src.search(q):
                 out.append(b.to_dict())
         except Exception as e:  # noqa: BLE001 — per-source failures are reported, not fatal
             logger.warning("search source %s failed: %s", n, e, exc_info=True)
@@ -185,20 +239,33 @@ def search(query: str, sources: list[str] | None = None, limit: int = 30) -> dic
         if t.is_alive() and n not in errors:
             errors[n] = "TimeoutError: source did not respond in 20s"
     out.sort(key=lambda d: d.get("title", ""))
-    # 外文书名提示：中文 query 且外文源（英文书名索引）全 0 结果、至少一个正常执行
-    # （全挂不提示，避免误导"去搜英文名"而源本身不可用）——2026-09-05 少爷实测
-    # 「傲慢和偏见」外文原版 0 结果而 pride and prejudice 可搜
+    # 外文书名引导（2026-09-05 少爷实测「傲慢和偏见」外文原版 0 结果而
+    # pride and prejudice 可搜）：中文 query + 外文源全 0 + 至少一个正常执行
+    # （全挂不提示，避免误导「去搜英文名」而源本身不可用）。翻译可用时已按
+    # 译名搜过仍 0 → 提示带上实际译名（直译可能不精确，引导手动搜官方英文名）
     hint = ""
     if _CJK_RE.search(query):
         foreign_ok = [n for n in names if n in _FOREIGN_SOURCES and n not in errors]
         foreign_hits = any(d.get("source") in _FOREIGN_SOURCES for d in out)
         if foreign_ok and not foreign_hits:
-            hint = "外文原版源按英文书名索引，中文书名搜不到——试试英文原名直接搜"
+            if translated and translated["via"] == "mt":
+                hint = (
+                    f"外文源已按英文名「{translated['to']}」检索仍无结果——"
+                    "系统译名可能不精确，可手动搜该书官方英文名"
+                )
+            elif translated:  # 词典命中仍 0：英文名是准的，是站里没有
+                hint = (
+                    f"外文源已按英文名「{translated['to']}」检索仍无结果——"
+                    "此书可能尚未进入公版（古登堡/维基文库只有公版书）"
+                )
+            else:
+                hint = "外文原版源按英文书名索引，中文书名搜不到——试试英文原名直接搜"
     return {
         "query": query,
         "count": len(out),
         "errors": errors,
         "hint": hint,
+        "translated": translated,
         "results": out[:limit],
         "sources": names,
     }

@@ -137,12 +137,16 @@ async function doSearch(q) {
   _searchCache = r.results || [];
   const meta = [];
   if (r.count) meta.push(`命中 ${r.count} 条`);
+  // 方案 B 透明标注：中文书名已自动翻译成英文检索外文源（仅外文源有命中时显示）
+  const foreignHit = _searchCache.some((b) => ['gutenberg', 'wikisource-en', 'libgen'].includes(b.source));
+  if (r.translated && r.translated.to && foreignHit)
+    meta.push(`<span class="badge" title="中文书名已自动翻译，外文源按英文名检索">已按英文名「${esc(r.translated.to)}」检索外文源</span>`);
   if (r.hint) meta.push(`<span class="badge" title="外文源只索引英文书名">${esc(r.hint)}</span>`);
   Object.entries(r.errors || {}).forEach(([s, e]) =>
     meta.push(`<span class="badge warn" title="技术详情见日志 bookfetch.log">${esc(labelOf(s))}：${esc(e)}</span>`));
   $('#search-meta').innerHTML = meta.join(' ');
   if (!_searchCache.length) {
-    box.innerHTML = '<p class="empty">没有结果——换个关键词，或换个书籍分类再试</p>';
+    box.innerHTML = '<p class="empty">没有结果，试试换个关键词或分类</p>';
     return;
   }
   box.innerHTML = _searchCache.map(bookCard).join('');
