@@ -1,8 +1,10 @@
 # bookfetch
 
-给 Agent 用的电子书查找与下载 CLI：把书名丢给它，它自动把请求路由到**实际能下到书**的源。
+把书名丢给它，自动路由到**能下到书的源**：中文古籍、网络小说、公版外文，一键下载成 txt / epub，桌面 App 里直接读。
 
-设计出发点（实测结论）：现成的 agent 找书技能几乎全部绑定 Z-Library / Libgen，而这两者对**中文古籍基本无效**（不收录 / 账号墙 / Cloudflare 墙）。中文古籍真正能用的源是 ctext.org（中国哲学书电子化计划：免费、带标点、国内直连）——没人把它做成 agent 工具，于是有了 bookfetch。
+双形态：**桌面 App** 给普通用户（搜索/书架/阅读一体，免装 Python），**CLI** 给 agent 与开发者（JSON 输出，可脚本化）。
+
+设计缘起：主流找书工具绑定 Z-Library / Libgen，对中文古籍基本无效；真正能用的 ctext.org 没人做成工具，于是有了 bookfetch。
 
 ```
 bookfetch search 渊海子平     # 跨源搜索，输出 JSON
@@ -166,10 +168,9 @@ bookfetch get ctext 727782 --out ./books --simplify
 > 网络提示：ctext/github/gutenberg/biquge 大陆直连可用；wikisource（Wikimedia）与 libgen 大陆直连不通，
 > 需能访问对应站点的网络环境（如代理），本工具遵循系统 http_proxy/https_proxy 环境变量。
 
-> ⚠️ **biquge 源特别提示**：本工具为中立下载工具（yt-dlp 模式），不存储/分发内容。笔趣阁镜像站收录的
-> 中文网文多为**版权期内作品**（2025 年北京高院终审已判「笔趣阁」为盗版平台代名词）——请仅下载你有权
-> 获取的内容（作者已开放/正版已下架/你已购买等），使用者自行承担下载与使用的合法性责任。该源默认输出繁体，
-> 可用 `--simplify` 转换。
+> ⚠️ **biquge 源特别提示**：笔趣阁镜像站收录的中文网文多为**版权期内作品**（2025 年北京高院终审已判
+> 「笔趣阁」为盗版平台代名词）——请仅下载你有权获取的内容（作者已开放/正版已下架/你已购买等），
+> 使用者自行承担下载与使用的合法性责任。合规总述见下节「源与合规」。
 
 > ⚠️ **内容质量说明**：bookfetch 只负责路由与下载，**不改写内容**——文字质量（错字、缺章、章节错乱、
 > 简繁混杂等）取决于各源站的整理与校对水平，不同来源差异很大。参考：ctext / wikisource / gutenberg 为
@@ -180,9 +181,9 @@ bookfetch get ctext 727782 --out ./books --simplify
 
 ## 源与合规
 
-- bookfetch 是**路由与下载工具**，不存储、不重新分发任何书籍内容；下载物只落在使用者本地
+- bookfetch 是**路由与下载工具**：不存储、不重新分发任何书籍内容，下载物只落在使用者本地；
+  抓取只走各源公开页面 + 内置限速，不做任何绕过（登录墙/验证码/反爬规避）
 - 各源内容版权归原作者/整理者所有。公版内容可自由使用；**仍在版权期内的内容，请使用者自行确认下载与使用的合法性**
-- 抓取行为遵守各源访问条款：公开页面、内置限速、不做任何绕过（登录墙/验证码/反爬规避）
 - 测试 fixture 为各源页面/结构的极小样本，仅用于解析测试，来源记录见 tests/fixtures/README.md
 - 任何权利方认为本工具对某源的使用不妥，请提 issue，我们会调整或移除该源
 
@@ -209,32 +210,16 @@ uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 - **正式发版**（一条命令，触发构建并挂到 Release 页）：
 
 ```bash
-bash scripts/release.sh v0.4.0     # 打 tag 并推送 → Release 附件出现 mac/win zip + PyPI 自动发布
+bash scripts/release.sh v1.0.0     # 打 tag 并推送 → Release 附件出现 mac/win zip + PyPI 自动发布
 ```
 
 - **PyPI 自动发布**（tag v* 时由 `pypi` workflow 构建 sdist+wheel 并上传，走 Trusted Publisher OIDC 无 token）：需在 PyPI 项目设置一次性绑定 `Helioswei/bookfetch`（Publishing → Add trusted publisher，workflow name 填 `pypi`）。发布前先 bump `pyproject.toml` 版本号并提交（workflow 会校验 tag == pyproject 版本，不一致即拦）
 
-## 路线图
+## 更新记录与路线图
 
-- [x] M1: ctext 源 + search/get CLI（2026-09-03 完成）
-- [x] M2: github 古籍源 + OpenCC 简繁转换 + 合规声明（2026-09-03 完成）
-- [x] M3: EPUB 转换 + 章节切分（2026-09-04 完成，零依赖手写 zip+xhtml）
-- [x] M4: wikisource 中/英公版源 + libgen 探活镜像链 + 白话注解 spike（2026-09-04 完成；白话注解判定放弃，见 PRD）
-- [x] M5: SKILL.md agent 外壳 + PyPI 发布（2026-09-04 完成：仓库已 public、PyPI bookfetch 0.3.0 已上传，安装链路端到端验证通过）
-- [x] M6: Gutenberg 英文公版源（2026-09-04 完成，许可头尾自动剥离；E2E《Alice's Adventures in Wonderland》txt/epub 全通）
-- [x] M7: github 源多仓库化 + 搜索聚合（mymmsc/books + xiaopangxia 中医药 ~700 本；license 实测标注 + 404 死亡探活，2026-09-04 完成）
-- [x] M8: 中文网文/小说源 biquge（2026-09-04 完成：spike 探测 5 站 → biquge.tw 唯一活体全链路通 → 收录；README 版权红字免责；繁体 --simplify）
-- [x] N1: 已下载去重（yt-dlp archive 模式，2026-09-04 完成：fetch 层缓存 source:id → 命中零网络重渲染；txt/epub 互认；--force 重下）
-- [x] N2 前端+serve（2026-09-04 完成：`bookfetch serve` 浏览器 UI——搜索/书架/阅读器三视图；下载逻辑与 CLI 共用同一套 fetch_cache+渲染内核；n2core API 层 serve 与桌面壳共用；全源并行搜索每源 20s 超时）
-- [x] N2 壳（2026-09-04 完成：`bookfetch gui` pywebview 桌面窗口——指向内嵌 localhost HTTP，前端零改动；实测窗口渲染 + 8 源标签 + 键盘输入全通）
-- [x] UI「书卷宣纸」主题 + mac .app 打包（2026-09-04 完成：宣纸暖底/墨字/朱红/「藏」印三视图定稿实拍验收；书架行式+续读进度条；hash 深链 `#shelf` `#reader/书名`；`packaging/desktop_entry.py` + PyInstaller → `dist/bookfetch.app` 31MB 实测启动渲染 ✓）
-- [x] N3 翻译（2026-09-05 完成：中英双向沉浸式整章对照——macOS 系统翻译桥 swift + 逐段译文 UI；方向自动（英文书英译中/中文书中译英）；首次引导「翻译语言包准备器」一键下载+安装语言包约 1GB，全离线）
-- [x] v0.4.0：英文切章 + B4 下载体验三件套 + CLI/UI 边界（2026-09-05 完成：英文书 `CHAPTER/CHAP. + 数字/罗马` 独立标题行切章（含目录/逐章翻译）；UI 下载并发队列（上限 3、排队可取消）、单文件 Range 断点续传、biquge 逐章断点 + 下载中「读已下 N 章」边下边读——均为 serve/gui 任务系统专属，CLI get 同步直连不受影响；106 tests 绿，CI 双平台绿）
-- [x] v0.4.0 实测收尾（2026-09-05 a91ccf1，未发 tag）：下载中半成品上架书架——「未完成」红框条目直接读已下部分、下完自动换正式条目且阅读进度无缝继承（.part 与正式书共享进度）；任务面板收缩态改小圆钮（▸+完成计数）不再挡阅读翻章；111 tests 绿
-- [x] v0.4.0 实测收尾二（2026-09-05，212473f 已推送）：① 阅读器切章回顶——点「下一章」从新章开头读（原 bug：滚动位置残留上一章中途；修复弃 rAF 改 innerHTML 后同步定位——后台/不可见标签页 rAF 被浏览器节流不触发）；② 书架「未完成」条目加「继续下载」按钮——`.part.meta` 升级为 5 字段 `{source, id, title, fmt, index}`（index=最后成功章，续传从 index+1 抓）；meta 带 id 时 source+id 全等才续传（防同源同名不同转载版本误续）；旧版 meta（只有 source+index）按书名回源搜索找回，同名多版本不自动挑、中文引导手动选版本；续传完成自动清 .part 换正式条目、进度继承；117 tests 绿
-- [x] 书架管理三件套（2026-09-05，212473f 已推送）：① 书架删除书——行尾「删除」钮 + 原生 confirm 二次确认 → `delete_book` API（删文件 + 清进度条目 + 级联 .part/.meta）；② 导入本地书——书架右上「导入书籍」文件选择器（.txt/.epub 多选）→ base64 → `import_book` API 写书库上架（重名自动加序号 名(1).txt 不覆盖、文件名净化防目录穿越）；③ 「打开书库」按钮——系统文件管理器打开书库目录（Finder/explorer/xdg-open 平台分派）；空书架引导文案同步提示导入；122 tests 绿
-- [x] PyPI 发布自动化（2026-09-05 待绑定）：tag v* 由 `pypi` workflow 自动构建发布（Trusted Publisher OIDC，无 token）；版本校验 tag == pyproject
+详细版本历史见 [CHANGELOG.md](CHANGELOG.md)。当前：0.3/0.4 开发期已完成，**1.0.0 稳定版规划中**。
+下一步候选：Windows 端翻译（在线 provider）、Apple 签名、手机 App——欢迎提 issue 排优先级。
 
 ## 许可
 
-MIT。只面向公版/开放文本（ctext 收录均为公版古籍）。请遵守各源的访问条款。
+工具代码 MIT。书的内容版权归原作者/整理者——合规总述与各源内容质量差异见上文「源与合规」与「内容质量说明」。
