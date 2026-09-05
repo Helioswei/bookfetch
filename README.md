@@ -249,7 +249,7 @@ uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 ## 更新记录与路线图
 
 详细版本历史见 [CHANGELOG.md](CHANGELOG.md)，**当前版本见文首 PyPI 徽章**（发布即自动更新）。bookfetch 自 **v1.0.0**（2026-09-05）起为稳定对外版；0.x 开发期（2026-09-03 ~ 09-05）已完结。版本号只维护一处 = `pyproject.toml`（CLI `--version`、发布 tag 均自动读取，仓库内无第二处手写）。
-下一步候选：libgen 新版站适配（英文现代书渠道）、Windows 端翻译（在线 provider）、Apple 签名、手机 App——欢迎提 issue 排优先级。
+路线图候选：**libgen 新版站适配**（英文现代书渠道）、**Windows 端翻译**（在线 provider）、**Apple 签名**（纯小白免确认）、**手机 App + LAN**（手机看书）——欢迎提 issue 排优先级；完整候选/决策清单见 `docs/PRD.md` 第 8 节（本地留档，未入库）。
 
 ## 许可
 
