@@ -27,17 +27,18 @@ jobs:
             os: windows-latest
             zip: bookfetch-windows-x64.zip
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: ./.github/actions/desktop-build
         with:
           zip-name: ${{ matrix.zip }}
 
-      # archive: false = 单文件原样上传，GitHub 不再包 zip 层（默认 true 会再包一层 → 用户解压两次）
+      # archive: false = 单文件原样上传，GitHub 不再包 zip 层（v7 参数；v4 无此参数且会强制再包层 → 用户解压两次）
       # zip 由 action.yml 打（zip -rqy 保留 .app 权限位）——解压一次即得可运行产物
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
+          name: ${{ matrix.zip }}
           path: ${{ matrix.zip }}
           if-no-files-found: error
           archive: false
