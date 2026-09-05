@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import json
+import re
 import sys
 from pathlib import Path
 
-from . import __version__
 from . import fetch_cache
 from .model import Book, Chapter, FetchResult
 from .sources import get_source, search_all, source_names
@@ -17,6 +18,20 @@ from .util.simplify import to_simplified
 from .util.splitters import split_headings
 
 DESC = "Agent-friendly ebook finder: routes book queries to working sources."
+
+
+def _pkg_version() -> str:
+    """版本单一事实源 = pyproject.toml [project] version。
+
+    安装态（pip/uv/editable 均有 dist-info）读 importlib.metadata；源码裸跑
+    （无 install）兜底正则直读 pyproject。勿改回 __version__ 双写（坑 55）。
+    """
+    try:
+        return importlib.metadata.version("bookfetch")
+    except importlib.metadata.PackageNotFoundError:
+        pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+        m = re.search(r'^version\s*=\s*"([^"]+)"', pyproject.read_text(encoding="utf-8"), re.M)
+        return m.group(1) if m else "unknown"
 
 
 def _human_search(obj: dict) -> None:
@@ -127,7 +142,7 @@ def _render_get(src, fr: FetchResult, args) -> FetchResult:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="bookfetch", description=DESC)
-    p.add_argument("--version", action="version", version=f"bookfetch {__version__}")
+    p.add_argument("--version", action="version", version=f"bookfetch {_pkg_version()}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sp = sub.add_parser("search", help="search sources for a book")

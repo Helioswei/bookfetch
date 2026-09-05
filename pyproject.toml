@@ -1,6 +1,6 @@
 [project]
 name = "bookfetch"
-version = "1.0.0"
+version = "1.0.1"
 description = "Ebook finder & downloader (desktop app + CLI): routes book queries to working sources — Chinese classics, web novels, public-domain English. JSON output for agents."
 readme = "README.md"
 requires-python = ">=3.10"
