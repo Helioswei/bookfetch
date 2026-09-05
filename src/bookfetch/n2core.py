@@ -380,11 +380,17 @@ def cancel(task_id: str) -> dict:
 
 _TXT_EXT = (".txt",)
 _EPUB_EXT = (".epub",)
+_PART_SUFFIX = ".txt.part"  # B4c 边下边读/断点半成品（库内 <书名>.txt.part）
 
 
 def shelf() -> dict:
     """Scan the library dir for books, each with reading progress:
-    [{rel, title, format, size_kb, progress:{chapter,pct}|None}]."""
+    [{rel, title, format, size_kb, progress:{chapter,pct}|None}].
+
+    未完成下载（B4c 边下边读的 .txt.part）也列出：partial=True + 已下章数，
+    点击直接读半成品；下载完成后 .part 消失、正式书条目接管同一进度 key。
+    同名正式书已存在时跳过 .part（完成路径本会删，残留不双列）。
+    """
     root = library_dir()
     books = []
     prog = _load_progress()
@@ -405,6 +411,27 @@ def shelf() -> dict:
                     "size_kb": max(1, p.stat().st_size // 1024),
                     "chapters": nch,
                     "progress": prog.get(rel) or None,
+                }
+            )
+        elif p.name.endswith(_PART_SUFFIX):
+            # 未完成下载的半成品：书架可见可读（书名.txt.part）
+            title = p.name[: -len(_PART_SUFFIX)]  # 书名（正式书同源命名）
+            if (root / f"{title}.txt").exists():
+                continue  # 正式书已入库 → .part 是残留（正常完成路径会删）
+            rel = library_rel(p)
+            try:
+                nch = len(_open(p).chapters)
+            except Exception:
+                nch = None
+            books.append(
+                {
+                    "rel": rel,
+                    "title": title,
+                    "format": "txt",
+                    "size_kb": max(1, p.stat().st_size // 1024),
+                    "chapters": nch,
+                    "partial": True,
+                    "progress": prog.get(_progress_key(rel)) or None,
                 }
             )
     return {"library": str(root), "books": books}
@@ -542,9 +569,11 @@ def open_book(rel: str, simp: bool = False) -> dict:
     titles = [c.title or f"第{i+1}部分" for i, c in enumerate(ob.chapters)]
     if simp:
         titles = [_conv(ob, t) for t in titles]
+    # .part 半成品：书名去掉 .txt.part 双后缀（书名.txt.part → 书名）
+    btitle = p.name[: -len(_PART_SUFFIX)] if p.name.endswith(_PART_SUFFIX) else p.stem
     return {
         "rel": rel,
-        "title": p.stem,
+        "title": btitle,
         "format": ob.format,
         "base": ob.base,
         "translate": translate_available(),
@@ -641,15 +670,24 @@ def _load_progress() -> dict:
         return {}
 
 
+def _progress_key(rel: str) -> str:
+    """B4c 进度 key 归一：半成品 .part 的阅读进度记到正式书名上。
+
+    .part 读（书名.txt.part）与下载完成后的正式书（书名.txt）共享同一
+    key —— 下载完成书架换正式条目时进度无缝继承，不从头。
+    """
+    return rel[: -len(".part")] if rel.endswith(".part") else rel
+
+
 def progress_get(rel: str) -> dict:
-    return {"rel": rel, "progress": _load_progress().get(rel, {})}
+    return {"rel": rel, "progress": _load_progress().get(_progress_key(rel), {})}
 
 
 def progress_set(rel: str, chapter_idx: int, pct: int = 0) -> dict:
     """Save reading position: chapter index + pct (0..1000 scroll fraction)."""
     with _LOCK:
         d = _load_progress()
-        d[rel] = {"chapter": int(chapter_idx), "pct": int(pct)}
+        d[_progress_key(rel)] = {"chapter": int(chapter_idx), "pct": int(pct)}
         _PROGRESS.parent.mkdir(parents=True, exist_ok=True)
         _PROGRESS.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
     return {"ok": True}

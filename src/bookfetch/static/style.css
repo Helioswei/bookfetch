@@ -219,6 +219,11 @@ a { color: var(--seal); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; max-width: 46%;
 }
 .book-row .fmt { font-size: .74rem; color: var(--ink-3); flex: none; }
+.book-row .fmt em.warn {
+  font-style: normal; color: var(--seal); border: 1px solid rgba(166, 59, 46, .35);
+  border-radius: 4px; padding: 0 .35rem; font-size: .66rem;
+}
+.book-row.partial .t { color: var(--ink-2); }  /* 未完成半成品：书名稍弱，未完成徽标已示意 */
 .book-row .prog {
   height: 3px; background: var(--line); border-radius: 2px;
   overflow: hidden; flex: 1; max-width: 120px; min-width: 60px;
@@ -310,7 +315,13 @@ body[data-reader-dark="1"] {
   border-radius: 999px; padding: .05rem .5rem;
 }
 .tasks-list { display: flex; flex-direction: column; gap: .4rem; padding: .55rem .65rem; max-height: 46vh; overflow-y: auto; }
+/* 收缩态 = 小圆钮：不占宽不遮阅读区/翻章控件（2026-09-05 少爷反馈：原收缩只藏列表，
+   340px 宽面板仍挡右下角"下一章"区域） */
+.tasks.collapsed { width: auto; border-radius: 999px; }
 .tasks.collapsed .tasks-list { display: none; }
+.tasks.collapsed .tasks-head { border-bottom: none; background: var(--paper-card); padding: .3rem .5rem; }
+.tasks.collapsed .tasks-title { display: none; }
+.tasks.collapsed .tasks-toggle { font-size: 1.05rem; color: var(--ink-2); }
 
 .task {
   background: var(--paper-well); border: 1px solid var(--line); border-radius: 9px;

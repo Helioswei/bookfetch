@@ -474,3 +474,57 @@ def test_open_activator_missing_raises(env, monkeypatch):
     monkeypatch.setattr("bookfetch.util.translator.find_activator", boom)
     with pytest.raises(ValueError, match="准备器缺失"):
         n2core.open_activator()
+
+
+# --------------------------------------------------------- B4c 书架半成品/进度继承 ---
+
+def _write_part(env, name: str, n: int) -> str:
+    """写 B4c 半成品库文件（书名.txt.part，=== 标题 === 分隔）"""
+    (env / "Books").mkdir(parents=True, exist_ok=True)
+    text = "\n\n".join(f"=== 第{i}章 ===\n正文{i}" for i in range(n))
+    (env / "Books" / f"{name}.txt.part").write_text(text + "\n", encoding="utf-8")
+    return f"{name}.txt.part"
+
+
+def test_shelf_lists_partial_book_and_skips_residual(env):
+    """书架列出未完成下载（.part）：partial 标识 + 已下章数 + 干净书名。
+
+    同名正式书已存在 → .part 残留不双列（正常完成路径会删，防旧残留）。
+    """
+    rel = _write_part(env, "连载中", 5)
+    (env / "Books" / "已完成书.txt").write_text("=== 一 ===\n正文\n", encoding="utf-8")
+    _write_part(env, "已完成书", 9)  # 与正式书同名的残留 .part
+    books = n2core.shelf()["books"]
+    rows = {b["rel"]: b for b in books}
+    p = rows[rel]
+    assert p["partial"] is True
+    assert p["title"] == "连载中"          # 书名.txt.part → 书名
+    assert p["chapters"] == 5
+    # 正式书条目无 partial 标识；同名残留 .part 不双列
+    assert "partial" not in rows["已完成书.txt"]
+    assert "已完成书.txt.part" not in rows
+
+
+def test_partial_progress_inherited_by_formal_book(env):
+    """进度 key 归一：读 .part 的进度记在正式书名下 → 下载完成后书架换
+    正式条目进度无缝继承（不从头）。"""
+    rel = _write_part(env, "追更书", 8)
+    n2core.progress_set(rel, chapter_idx=3, pct=500)  # 读半成品到第 4 章
+    # .part 条目显示进度
+    rows = {b["rel"]: b for b in n2core.shelf()["books"]}
+    assert rows[rel]["progress"]["chapter"] == 3
+    # 正式书（同书名）打开读到同一进度
+    (env / "Books" / "追更书.txt").write_text(
+        "\n\n".join(f"=== 第{i}章 ===\n正文{i}" for i in range(120)), encoding="utf-8")
+    pg = n2core.progress_get("追更书.txt")
+    assert pg["progress"]["chapter"] == 3
+    # progress_set 也归一（.part key 不再产生第二份）
+    n2core.progress_set("追更书.txt", chapter_idx=5, pct=0)
+    assert n2core.progress_get(rel)["progress"]["chapter"] == 5
+
+
+def test_open_partial_book_clean_title(env):
+    rel = _write_part(env, "半本", 3)
+    ob = n2core.open_book(rel)
+    assert ob["title"] == "半本"
+    assert len(ob["chapters"]) == 3

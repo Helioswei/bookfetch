@@ -222,7 +222,8 @@ const _finished = { n: 0 };
 function bumpBadge() {
   _finished.n += 1;
   const bd = $('#tasks-badge');
-  bd.textContent = `${_finished.n} 项完成`;
+  bd.textContent = `${_finished.n}`;
+  bd.title = `${_finished.n} 项下载完成`;
   bd.classList.remove('hidden');
 }
 
@@ -280,6 +281,7 @@ function pollTask(taskId, el, spec) {
         .querySelector('.open').onclick = () => { el.remove(); openReader(r.out_rel); };
       el.querySelector('.x').onclick = () => el.remove();
       bumpBadge();
+      if (!$('#view-shelf').classList.contains('hidden')) loadShelf();  // 半成品条目 → 正式书：书架即时换新
       return;
     }
     if (r.status === 'error') {
@@ -370,9 +372,9 @@ async function loadShelf() {
       pos = `<span class="pos">第 ${ch} 章${pp != null ? ' · ' + pp + '%' : ''}</span>`;
     }
     return `
-    <div class="book-row" data-rel="${esc(b.rel)}" title="${esc(b.title)}">
+    <div class="book-row${b.partial ? ' partial' : ''}" data-rel="${esc(b.rel)}" title="${b.partial ? '未完成下载 · 点击阅读已下部分（下载完成后自动变正式书，进度保留）' : esc(b.title)}">
       <span class="t">${esc(b.title)}</span>
-      <span class="fmt">${esc(b.format)} · ${b.size_kb} KB</span>
+      <span class="fmt">${b.partial ? '<em class="warn">未完成</em>' : `${esc(b.format)} · ${b.size_kb} KB`}</span>
       ${bar}${pos}
     </div>`;
   }).join('');
