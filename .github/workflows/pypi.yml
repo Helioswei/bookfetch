@@ -1,10 +1,10 @@
 name: pypi
 
-# 打 tag v*（如 v0.4.0）→ 自动构建 sdist+wheel 并发布到 PyPI。
+# 打 tag v* → 自动构建 sdist+wheel 并发布到 PyPI。
 # 认证走 Trusted Publisher（OIDC，无 token）——PyPI 项目设置绑定
 # 仓库 Helioswei/bookfetch + workflow 名 pypi 后即可（PyPI → bookfetch →
 # Publishing → Trusted Publishers → Add publisher，workflow name 填 pypi）。
-# 一条命令发版（桌面包 Release + PyPI 双发）：bash scripts/release.sh v0.4.0
+# 一条命令发版（桌面包 Release + PyPI 双发）：bash scripts/release.sh（tag 自动取 pyproject.toml version）
 
 on:
   push:

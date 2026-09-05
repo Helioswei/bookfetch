@@ -1,5 +1,7 @@
 # bookfetch
 
+[![PyPI version](https://img.shields.io/pypi/v/bookfetch?color=blue&label=PyPI)](https://pypi.org/project/bookfetch/) [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 把书名丢给它，自动路由到**能下到书的源**：中文古籍、网络小说、公版外文，一键下载成 txt / epub，桌面 App 里直接读。
 
 双形态：**桌面 App** 给普通用户（搜索/书架/阅读一体，免装 Python），**CLI** 给 agent 与开发者（JSON 输出，可脚本化）。
@@ -242,11 +244,11 @@ uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 ## 发布（桌面包 + PyPI）
 
 - **日常推 main**：自动构建 mac/win 桌面包 → Actions artifact（最新包随时可取），不发布任何正式版
-- **正式发版**（一条命令，仅打 tag 触发）：`bash scripts/release.sh v1.0.1`——tag 推送后 Release 页自动挂出 mac/win zip，PyPI 同步发布（Trusted Publisher 已绑定，无需 token；pypi workflow 校验 tag == pyproject.toml 版本，不一致即拦）
+- **正式发版**（一条命令，仅打 tag 触发）：`bash scripts/release.sh`——**tag 自动取 pyproject.toml 的 version**（勿手传版本号；如显式传参会校验一致，不一致即中止）。tag 推送后 Release 页自动挂出 mac/win zip，PyPI 同步发布（Trusted Publisher 已绑定，无需 token；pypi workflow 校验 tag == pyproject.toml 版本，不一致即拦）。发版 = 只改 pyproject.toml version 一处 → commit → 跑此命令
 
 ## 更新记录与路线图
 
-详细版本历史见 [CHANGELOG.md](CHANGELOG.md)。**当前稳定版：v1.0.1**（2026-09-05 首发；v1.0.1 为同日修复版，修 CLI `--version` 显示。0.x 开发期 2026-09-03 ~ 09-05 完结）。
+详细版本历史见 [CHANGELOG.md](CHANGELOG.md)，**当前版本见文首 PyPI 徽章**（发布即自动更新）。bookfetch 自 **v1.0.0**（2026-09-05）起为稳定对外版；0.x 开发期（2026-09-03 ~ 09-05）已完结。版本号只维护一处 = `pyproject.toml`（CLI `--version`、发布 tag 均自动读取，仓库内无第二处手写）。
 下一步候选：libgen 新版站适配（英文现代书渠道）、Windows 端翻译（在线 provider）、Apple 签名、手机 App——欢迎提 issue 排优先级。
 
 ## 许可

@@ -2,6 +2,10 @@
 
 bookfetch 版本历史。版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)：0.x 为开发期（2026-09-03 ~ 09-05），1.0.0 起为稳定对外版。
 
+## v1.0.1（2026-09-05）修复版
+
+修 CLI `--version` 显示错误（v1.0.0 发布事故：`__init__.py` 的 `__version__` 常量漏 bump，显示 0.3.0）。**根治**：删除源码 `__version__` 常量（双写结构必漏），CLI `--version` 改读安装元数据（`importlib.metadata`，源码裸跑兜底读 pyproject）——**版本单一事实源 = pyproject.toml**。发布工具链同步：`scripts/release.sh` tag 自动取 pyproject version（可选传参一致性校验），README 顶加 PyPI 版本徽章（自动更新），文档/workflows 注释去版本号化。
+
 ## v1.0.0（2026-09-05）首个稳定版
 
 0.3.0（PyPI 既有版）之后的全部迭代收口为第一个稳定版：0.4.0 的英文切章与下载体验三件套、书架管理、阅读器四修、中英双向翻译（macOS 系统翻译引擎）、代理设置、桌面 App 打包链与 CI 双平台发布，以及 2026-09-05 实测反馈批次 2/3 的全部修复（导入原生对话框、主题按钮语义、翻译桥打包、搜索源三修、**外文原版中文书名直达**——详见下方各段）。桌面 App（mac/win）与 CLI 双形态对外，PyPI 同步发布。
