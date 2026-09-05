@@ -23,9 +23,13 @@ jobs:
           - label: macos-arm64
             os: macos-26          # Apple 芯片 (M1+)，macOS 26 镜像（翻译桥需 26 SDK）；Intel Mac 走 CLI/PyPI
             zip: bookfetch-macos-arm64.zip
+            pkg: dist/bookfetch.app   # 上传产物目录本体：artifact 下载解压一次即得 .app（传 zip 会被 GitHub 再包一层 = 双层压缩）
+            art: bookfetch-macos-arm64
           - label: windows-x64
             os: windows-latest
             zip: bookfetch-windows-x64.zip
+            pkg: dist/bookfetch        # win onedir 目录
+            art: bookfetch-windows-x64
     steps:
       - uses: actions/checkout@v4
 
@@ -36,6 +40,6 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.zip }}
-          path: ${{ matrix.zip }}
+          name: ${{ matrix.art }}
+          path: ${{ matrix.pkg }}
           if-no-files-found: error
