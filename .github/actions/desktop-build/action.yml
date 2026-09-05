@@ -18,6 +18,13 @@ runs:
 
     - name: Install deps (gui + dev + build)
       shell: bash
+      # UV_PYTHON_PREFERENCE=only-managed：强制 uv 用 standalone python（与本地打包
+      # 环境同构），防止捡 runner 系统 framework python（/usr/local/bin/python3.12）
+      # ——framework build 自带 openssl、CA 路径指向构建机 → 打包后证书加载空，
+      # GitHub 包全源 SSL CERTIFICATE_VERIFY_FAILED（实测 2026-09-05）
+      env:
+        UV_PYTHON_PREFERENCE: only-managed
+        UV_PYTHON_DOWNLOADS: automatic
       run: uv sync --extra gui --group dev --group build
 
     - name: Tests
