@@ -1,0 +1,13 @@
+{
+  "name": "bookfetch",
+  "owner": {
+    "name": "Helios Wei"
+  },
+  "plugins": [
+    {
+      "name": "bookfetch",
+      "source": "./",
+      "description": "多源电子书检索与下载 — 提供 bookfetch skill（找书/下书时自动调用 CLI）"
+    }
+  ]
+}

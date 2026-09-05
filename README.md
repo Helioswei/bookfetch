@@ -62,6 +62,25 @@ uv tool install git+https://github.com/Helioswei/bookfetch.git
 uv sync && uv run bookfetch search 论语
 ```
 
+### 给 AI Agent 装 skill（Claude Code / Hermes / OpenClaw）
+
+装好后，agent 在**任意项目**里遇到"找书/下电子书"会自动调用 bookfetch——首次会自动执行
+`pip install bookfetch`，用户无需手动装程序：
+
+```bash
+# Hermes（URL 直装；或先 hermes skills tap add Helioswei/bookfetch）
+hermes skills install https://raw.githubusercontent.com/Helioswei/bookfetch/main/skills/bookfetch/SKILL.md --name bookfetch
+
+# Claude Code（插件市场，装一次 /plugin marketplace add 即可，之后 /plugin install bookfetch@bookfetch）
+/plugin marketplace add Helioswei/bookfetch
+/plugin install bookfetch
+
+# OpenClaw / 其他 agent：复制 skills/bookfetch/ 目录到本机 skills 路径
+#   ~/.openclaw/skills/ 、 ~/.claude/skills/ 、 ~/.hermes/skills/ 均可
+```
+
+skill 源码在仓库 `skills/bookfetch/`；仓库级说明见 `AGENTS.md`（进仓库开发的 agent 自动读取）。
+
 ## 用法
 
 ### 搜索
