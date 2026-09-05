@@ -242,11 +242,11 @@ uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 ## 发布（桌面包 + PyPI）
 
 - **日常推 main**：自动构建 mac/win 桌面包 → Actions artifact（最新包随时可取），不发布任何正式版
-- **正式发版**（一条命令，仅打 tag 触发）：`bash scripts/release.sh v1.0.0`——tag 推送后 Release 页自动挂出 mac/win zip，PyPI 同步发布（Trusted Publisher 已绑定，无需 token；pypi workflow 校验 tag == pyproject.toml 版本，不一致即拦）
+- **正式发版**（一条命令，仅打 tag 触发）：`bash scripts/release.sh v1.0.1`——tag 推送后 Release 页自动挂出 mac/win zip，PyPI 同步发布（Trusted Publisher 已绑定，无需 token；pypi workflow 校验 tag == pyproject.toml 版本，不一致即拦）
 
 ## 更新记录与路线图
 
-详细版本历史见 [CHANGELOG.md](CHANGELOG.md)。**当前稳定版：v1.0.0**（0.x 开发期 2026-09-03 ~ 09-05 完结）。
+详细版本历史见 [CHANGELOG.md](CHANGELOG.md)。**当前稳定版：v1.0.1**（2026-09-05 首发；v1.0.1 为同日修复版，修 CLI `--version` 显示。0.x 开发期 2026-09-03 ~ 09-05 完结）。
 下一步候选：libgen 新版站适配（英文现代书渠道）、Windows 端翻译（在线 provider）、Apple 签名、手机 App——欢迎提 issue 排优先级。
 
 ## 许可
