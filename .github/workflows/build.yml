@@ -23,11 +23,9 @@ jobs:
           - label: macos-arm64
             os: macos-26          # Apple 芯片 (M1+)，macOS 26 镜像（翻译桥需 26 SDK）；Intel Mac 走 CLI/PyPI
             zip: bookfetch-macos-arm64.zip
-            art: bookfetch-macos-arm64
           - label: windows-x64
             os: windows-latest
             zip: bookfetch-windows-x64.zip
-            art: bookfetch-windows-x64
     steps:
       - uses: actions/checkout@v4
 
@@ -35,17 +33,11 @@ jobs:
         with:
           zip-name: ${{ matrix.zip }}
 
-      # upload-artifact 传目录会剥掉顶层目录名（dist/bookfetch.app → 打散成 Contents/…），
-      # 先 stage 出「只含产物本体」的目录，再传 stage/* 保留 bookfetch.app / bookfetch 顶层名
-      - name: Stage artifact (macOS)
-        if: runner.os == 'macOS'
-        run: mkdir -p stage && ditto dist/bookfetch.app stage/bookfetch.app   # ditto 保留权限/xattr，解压后双击可执行
-      - name: Stage artifact (Windows)
-        if: runner.os == 'Windows'
-        run: New-Item -ItemType Directory -Path stage -Force; Copy-Item -Recurse dist/bookfetch stage/bookfetch
+      # archive: false = 单文件原样上传，GitHub 不再包 zip 层（默认 true 会再包一层 → 用户解压两次）
+      # zip 由 action.yml 打（zip -rqy 保留 .app 权限位）——解压一次即得可运行产物
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.art }}
-          path: stage/*
+          path: ${{ matrix.zip }}
           if-no-files-found: error
+          archive: false
