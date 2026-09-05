@@ -767,3 +767,72 @@ def test_import_dialog_cancelled(env, monkeypatch):
     monkeypatch.setattr(n2core, "_IMPORT_DIALOG_HOOK", lambda: None)
     assert n2core.import_dialog() == {"cancelled": True}
     assert not list((env / "Books").glob("*.txt"))
+
+
+# ---------------------------------------------------------- search hint ---
+
+class _SearchSrc:
+    """fake 搜索源：hits = 命中 Book 列表；err 非空则 search 抛错（模拟源故障）。"""
+
+    def __init__(self, name, hits=(), err=None):
+        self.name = name
+        self.hits = hits
+        self.err = err
+
+    def search(self, query):  # noqa: ARG002 — fake 源忽略 query
+        if self.err:
+            raise self.err
+        return list(self.hits)
+
+
+def _book(source: str, title: str) -> Book:
+    return Book(
+        source=source, id="1", title=title, url="http://x/1",
+        subtitle="", format_hint="txt", extra={},
+    )
+
+
+def _patch_sources(monkeypatch, fakes: dict):
+    monkeypatch.setattr(n2core, "get_source", fakes.__getitem__)
+
+
+def test_search_hint_cjk_foreign_zero_results(monkeypatch):
+    """中文 query + 外文源全 0（但正常执行）→ hint 引导试英文原名。"""
+    _patch_sources(monkeypatch, {
+        "gutenberg": _SearchSrc("gutenberg"),
+        "wikisource-en": _SearchSrc("wikisource-en"),
+        "biquge": _SearchSrc("biquge", hits=[_book("biquge", "傲慢与偏见同人")]),
+    })
+    r = n2core.search("傲慢与偏见", sources=["gutenberg", "wikisource-en", "biquge"])
+    assert r["count"] == 1
+    assert "英文" in r["hint"]
+
+
+def test_search_no_hint_ascii_query(monkeypatch):
+    """英文 query 不触发提示（英文用户/agent 无此困惑）。"""
+    _patch_sources(monkeypatch, {
+        "gutenberg": _SearchSrc("gutenberg"),
+        "biquge": _SearchSrc("biquge", hits=[_book("biquge", "x")]),
+    })
+    r = n2core.search("Pride and Prejudice", sources=["gutenberg", "biquge"])
+    assert r["hint"] == ""
+
+
+def test_search_no_hint_when_foreign_has_hits(monkeypatch):
+    """外文源有命中 → 无需提示。"""
+    _patch_sources(monkeypatch, {
+        "gutenberg": _SearchSrc("gutenberg", hits=[_book("gutenberg", "Pride and Prejudice")]),
+    })
+    r = n2core.search("傲慢与偏见", sources=["gutenberg"])
+    assert r["hint"] == ""
+
+
+def test_search_no_hint_when_all_foreign_down(monkeypatch):
+    """外文源全故障（报错）→ 不提示（避免误导：源本身不可用时提示搜英文名无意义）。"""
+    _patch_sources(monkeypatch, {
+        "gutenberg": _SearchSrc("gutenberg", err=RuntimeError("boom")),
+        "biquge": _SearchSrc("biquge", hits=[_book("biquge", "x")]),
+    })
+    r = n2core.search("傲慢与偏见", sources=["gutenberg", "biquge"])
+    assert r["hint"] == ""
+    assert "gutenberg" in r["errors"]

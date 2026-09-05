@@ -151,6 +151,11 @@ def _resolve(rel: str) -> Path:
 
 # ---------------------------------------------------------------- search ---
 
+# 外文原版源：索引英文书名。中文 query 全 0 结果时给「试试英文原名」提示
+_FOREIGN_SOURCES = frozenset({"gutenberg", "wikisource-en", "libgen"})
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+
+
 def search(query: str, sources: list[str] | None = None, limit: int = 30) -> dict:
     """Search across sources in parallel (GUI: a slow/dead source must not
     stall the whole grid; CLI keeps its own serial search_all)."""
@@ -180,10 +185,20 @@ def search(query: str, sources: list[str] | None = None, limit: int = 30) -> dic
         if t.is_alive() and n not in errors:
             errors[n] = "TimeoutError: source did not respond in 20s"
     out.sort(key=lambda d: d.get("title", ""))
+    # 外文书名提示：中文 query 且外文源（英文书名索引）全 0 结果、至少一个正常执行
+    # （全挂不提示，避免误导"去搜英文名"而源本身不可用）——2026-09-05 少爷实测
+    # 「傲慢和偏见」外文原版 0 结果而 pride and prejudice 可搜
+    hint = ""
+    if _CJK_RE.search(query):
+        foreign_ok = [n for n in names if n in _FOREIGN_SOURCES and n not in errors]
+        foreign_hits = any(d.get("source") in _FOREIGN_SOURCES for d in out)
+        if foreign_ok and not foreign_hits:
+            hint = "外文原版源按英文书名索引，中文书名搜不到——试试英文原名直接搜"
     return {
         "query": query,
         "count": len(out),
         "errors": errors,
+        "hint": hint,
         "results": out[:limit],
         "sources": names,
     }

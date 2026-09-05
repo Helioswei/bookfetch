@@ -137,6 +137,7 @@ async function doSearch(q) {
   _searchCache = r.results || [];
   const meta = [];
   if (r.count) meta.push(`命中 ${r.count} 条`);
+  if (r.hint) meta.push(`<span class="badge" title="外文源只索引英文书名">${esc(r.hint)}</span>`);
   Object.entries(r.errors || {}).forEach(([s, e]) =>
     meta.push(`<span class="badge warn" title="技术详情见日志 bookfetch.log">${esc(labelOf(s))}：${esc(e)}</span>`));
   $('#search-meta').innerHTML = meta.join(' ');
