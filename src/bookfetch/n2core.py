@@ -31,7 +31,7 @@ from . import fetch_cache
 from .cli import _ensure_chapters, _render_get
 from .model import Book, Chapter, FetchResult
 from .sources import get_source, source_catalog, source_names
-from .util import CancelledError, FetchError, HumanVerificationError
+from .util import CancelledError, FetchError, HumanVerificationError, sanitize_filename
 from .util.epub import build_epub
 from .util.simplify import to_simplified, to_traditional
 from .util.splitters import split_rendered
@@ -196,7 +196,7 @@ class _Job:
     book_id: str
     title: str
     fmt: str
-    status: str = "running"   # running | done | error | cancelled
+    status: str = "queued"    # queued | running | done | error | cancelled
     out_rel: str = ""
     message: str = ""
     cancel: bool = False
@@ -204,35 +204,21 @@ class _Job:
     total: int = 0
 
 
+# 并发队列（B4 落地，2026-09-05）：下载并发上限 3，超出排队（queued）。
+# 多书多源可并行，但不再无上限叠线程打爆单源/带宽。
+_SLOTS = threading.Semaphore(3)
+
+
 def _run_job(job: _Job) -> None:
     try:
-        src = get_source(job.source)
-        if src is None:
-            raise ValueError(f"unknown source {job.source!r}")
-        book = Book(source=job.source, id=job.book_id, title=job.title)
-        fr = fetch_cache.load(job.source, job.book_id)
-        if fr is None:
-            def on_progress(done: int, total: int) -> bool:
-                job.done, job.total = done, total
-                return not job.cancel
-
-            job.message = "抓取中…"
-            fr = src.fetch(book, on_progress=on_progress)
-            fetch_cache.save(job.source, job.book_id, fr)
-        if fr.raw is not None:
-            # binary passthrough: _render_get saves the original .epub/.pdf
-            # as-is when args.format == "txt" (the CLI default convention)
-            fmt = "txt"
-            simp = split = False
-        else:
-            fmt = job.fmt if job.fmt in ("txt", "epub") else "txt"
-            simp = split = False
-        job.message = "整理成书…"
-        ns = Namespace(out=str(library_dir()), format=fmt, simplify=simp, split=split)
-        fr = _render_get(src, fr, ns)
-        job.out_rel = library_rel(Path(fr.out_path))
-        job.status = "done"
-        job.message = f"{fr.chars:,} chars · {len(_ensure_chapters(fr))} chapters"
+        _SLOTS.acquire()
+        try:
+            if job.cancel:
+                raise CancelledError()
+            job.status = "running"
+            _run_job_inner(job)
+        finally:
+            _SLOTS.release()
     except CancelledError:
         job.status = "cancelled"
         job.message = "已取消"
@@ -241,6 +227,97 @@ def _run_job(job: _Job) -> None:
         job.status = "error"
         logger.exception("download job %s (%s %s) failed", job.id, job.source, job.book_id)
         job.message = friendly(e)
+
+
+def _run_job_inner(job: _Job) -> None:
+    src = get_source(job.source)
+    if src is None:
+        raise ValueError(f"unknown source {job.source!r}")
+    book = Book(source=job.source, id=job.book_id, title=job.title)
+    fr = fetch_cache.load(job.source, job.book_id)
+    part = meta_path = None
+    if fr is None:
+        part, resume_from = _partial_state(book)
+        meta_path = library_dir() / f"{_partial_fname(book)}.txt.part.meta"
+
+        def on_progress(done: int, total: int) -> bool:
+            job.done, job.total = done, total
+            return not job.cancel
+
+        def on_checkpoint(index: int, c: Chapter) -> None:
+            # B4 边下边读：每成功一章 → 更新 meta（续传点）+ 增量追加库内 .part
+            if part is None:
+                return
+            meta_path.write_text(json.dumps({"source": job.source, "index": index}), encoding="utf-8")
+            head = f"=== {c.title} ===\n{c.text}"
+            with part.open("a", encoding="utf-8") as fh:
+                if part.stat().st_size == 0:
+                    fh.write(head)
+                else:
+                    fh.write("\n\n" + head)
+            job.done = index + 1
+
+        job.message = "抓取中…"
+        fr = src.fetch(book, on_progress=on_progress, on_checkpoint=on_checkpoint, resume_from=resume_from)
+        if resume_from > 0 and part is not None and part.exists():
+            # 续传：.part 已含 prior + 本次新增（checkpoint 全程 append）→ 直接还原全量
+            prior = split_rendered(part.read_text(encoding="utf-8"))
+            if prior:
+                fr.chapters = prior
+                fr.content = "\n\n".join(c.text for c in prior)
+                fr.chars = len(fr.content)
+        fetch_cache.save(job.source, job.book_id, fr)
+    if fr.raw is not None:
+        # binary passthrough: _render_get saves the original .epub/.pdf
+        # as-is when args.format == "txt" (the CLI default convention)
+        fmt = "txt"
+        simp = split = False
+    else:
+        fmt = job.fmt if job.fmt in ("txt", "epub") else "txt"
+        simp = split = False
+    job.message = "整理成书…"
+    ns = Namespace(out=str(library_dir()), format=fmt, simplify=simp, split=split)
+    fr = _render_get(src, fr, ns)
+    job.out_rel = library_rel(Path(fr.out_path))
+    if part is not None:  # 完成：清 B4 边读/断点残留（正式书已入库）
+        part.unlink(missing_ok=True)
+        if meta_path is not None:
+            meta_path.unlink(missing_ok=True)
+    job.status = "done"
+    job.message = f"{fr.chars:,} chars · {len(_ensure_chapters(fr))} chapters"
+
+
+def _partial_fname(book: Book) -> str:
+    """B4 库内边读/断点文件基名 —— 与正式渲染同名规则（sanitize 书名）。"""
+    return sanitize_filename(book.title) or f"{book.source}-{book.id}"
+
+
+def _partial_state(book: Book) -> tuple[Path, int]:
+    """B4 断点状态：(库内 .part 候选路径, resume_from toc 索引)。
+
+    .part 路径始终返回——首次下载也由 on_checkpoint 创建（边下边读起点）；
+    resume_from 仅当 meta 有效（source 匹配 + 整数索引）且 .part 在位才 >0；
+    meta 损坏/孤儿 → 清掉从头下，防误续。
+    """
+    fname = _partial_fname(book)
+    part = library_dir() / f"{fname}.txt.part"
+    meta = library_dir() / f"{fname}.txt.part.meta"
+    if not part.exists():
+        meta.unlink(missing_ok=True)  # .part 被清（手动/完成）→ meta 一并作废
+        return part, 0
+    if meta.exists():
+        try:
+            m = json.loads(meta.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            m = None
+        if (
+            isinstance(m, dict)
+            and m.get("source") == book.source
+            and isinstance(m.get("index"), int)
+        ):
+            return part, int(m["index"]) + 1
+        meta.unlink(missing_ok=True)  # 损坏/孤儿 meta：清掉，避免误续
+    return part, 0
 
 
 def download(source: str, id: str, title: str = "", fmt: str = "txt") -> dict:
@@ -267,20 +344,26 @@ def task_status(task_id: str) -> dict:
     }
     if job.status == "running" and job.total:
         out["progress"] = {"done": job.done, "total": job.total}
+    if job.done > 0:
+        # B4 边下边读：库内已下 .part 存在 → 前端「打开已读」入口
+        # （不限 running：cancelled 后 .part 保留，重试任务轮询即见；done 时已清理自然消失）
+        part, _ = _partial_state(Book(source=job.source, id=job.book_id, title=job.title))
+        if part.exists():
+            out["partial_rel"] = library_rel(part)
     return out
 
 
 def cancel(task_id: str) -> dict:
-    """Ask a running job to stop at the next chapter boundary (cooperative)."""
+    """Ask a job to stop (cooperative, next chapter boundary / queue slot)."""
     with _LOCK:
         job = _TASKS.get(task_id)
     if job is None:
         return {"task_id": task_id, "ok": False, "message": "任务不存在"}
-    if job.status != "running":
-        zh = {"done": "已完成", "error": "失败", "cancelled": "已取消"}.get(job.status, job.status)
-        return {"task_id": task_id, "ok": False, "message": f"任务已{zh}"}
-    job.cancel = True
-    return {"task_id": task_id, "ok": True, "message": "取消中…"}
+    if job.status in ("queued", "running"):
+        job.cancel = True
+        return {"task_id": task_id, "ok": True, "message": "取消中…"}
+    zh = {"done": "已完成", "error": "失败", "cancelled": "已取消"}.get(job.status, job.status)
+    return {"task_id": task_id, "ok": False, "message": f"任务已{zh}"}
 
 
 # ------------------------------------------------------------------ shelf ---

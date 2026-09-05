@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -168,6 +169,60 @@ def decode_bytes(data: bytes) -> str:
         except UnicodeDecodeError:
             continue
     return data.decode("utf-8", errors="replace")
+
+
+def fetch_bytes_resumable(url: str, dest: Path, *, timeout: float = 60.0, retries: int = _max_retries) -> bytes:
+    """Stream a GET to ``dest``, resuming from a previously written partial.
+
+    B4 断点续传（2026-09-05）：dest 已有内容时带 ``Range: bytes=N-`` 续传
+    （服务器忽略 Range 返回 200 时整文件重写，稳）；完成后 dest 即完整文件。
+    网络错/超时重试间不删 dest —— 残留即下次续传的起点；只有 403 挑战页
+    （重试无用）直接抛 HumanVerificationError，不落盘。返回完整 bytes。
+    """
+    from urllib.parse import urlparse
+
+    host = urlparse(url).netloc
+    last_err: Exception | None = None
+    for attempt in range(retries + 1):
+        _pace(host)
+        have = dest.stat().st_size if dest.exists() else 0
+        headers = {"User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9"}
+        if have > 0:
+            headers["Range"] = f"bytes={have}-"
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with _opener().open(req, timeout=timeout) as resp:
+                if resp.status == 200:
+                    have = 0  # server ignored Range → rewrite from scratch
+                with dest.open("ab" if have > 0 else "wb") as fh:
+                    while True:
+                        chunk = resp.read(1 << 16)
+                        if not chunk:
+                            break
+                        fh.write(chunk)
+                return dest.read_bytes()
+        except urllib.error.HTTPError as e:
+            last_err = e
+            if e.code == 403 and looks_like_challenge(decode_bytes(e.read(65536))):
+                raise HumanVerificationError(f"GET {url} 被源站人机验证拦截（HTTP 403）")
+            if e.code == 429:
+                wait = 10.0
+                try:
+                    wait = max(wait, float(e.headers.get("Retry-After", 10)))
+                except (TypeError, ValueError):
+                    pass
+                time.sleep(wait)
+                continue
+            if e.code == 416 and have > 0:
+                # 已完整（Range 起点 ≥ 文件尾）：残留即成品
+                return dest.read_bytes()
+            if attempt < retries:
+                time.sleep(3.0 * (attempt + 1))
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            last_err = e
+            if attempt < retries:
+                time.sleep(3.0 * (attempt + 1))
+    raise FetchError(f"GET {url} 失败（已重试 {retries} 次）：{last_err}")
 
 
 def sanitize_filename(name: str) -> str:

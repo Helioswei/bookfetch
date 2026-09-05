@@ -205,7 +205,7 @@ class GithubBooks(Source):
             books.extend(_search_paths(paths, cfg, query))
         return books
 
-    def fetch(self, book: Book, *, on_progress=None) -> FetchResult:
+    def fetch(self, book: Book, *, on_progress=None, on_checkpoint=None, resume_from=0) -> FetchResult:
         """Fetch one raw txt file; chapter structure comes from headings."""
         repo, sep, path = book.id.partition(":")
         if not sep or not repo or not path:

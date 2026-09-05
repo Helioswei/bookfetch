@@ -20,7 +20,7 @@ class Source(ABC):
         callers surface errors via the errors dict instead."""
 
     @abstractmethod
-    def fetch(self, book: Book, *, on_progress=None) -> FetchResult:
+    def fetch(self, book: Book, *, on_progress=None, on_checkpoint=None, resume_from=0) -> FetchResult:
         """Fetch and parse one edition into content + optional chapter
         structure. Never writes files — the CLI renders txt/epub.
 

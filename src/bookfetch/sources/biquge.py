@@ -120,9 +120,14 @@ class Biquge(Source):
             ))
         return books
 
-    def fetch(self, book: Book, *, on_progress=None) -> FetchResult:
+    def fetch(self, book: Book, *, on_progress=None, on_checkpoint=None, resume_from=0) -> FetchResult:
         """整本下载: 目录页 → 逐章正文 (每章一请求, 全局限速 2s/请求).
-        1361 章的书 ≈ 45 分钟; 空壳章节跳过不中断."""
+        1361 章的书 ≈ 45 分钟; 空壳章节跳过不中断.
+
+        B4 断点续传/边下边读：on_checkpoint(index, Chapter) 每成功章回调一次
+        （调用方持久化 + 增量写库）；resume_from = 跳过前 N 个 toc 条目
+        （续传起点 = 上次最后成功章之后，空壳章不计数不回调）。
+        """
         book_id = book.id.strip()
         if not book_id.isdigit():
             raise ValueError(f"biquge id must be the numeric book id, got {book.id!r}")
@@ -132,7 +137,8 @@ class Biquge(Source):
             raise ValueError(f"目录页无章节 (书 {book_id} 不存在或已下架?)")
         chapters: list[Chapter] = []
         skipped = 0
-        for i, (cid, toc_title) in enumerate(toc):
+        for i in range(resume_from, len(toc)):
+            cid, toc_title = toc[i]
             if on_progress and not on_progress(i, len(toc)):
                 raise CancelledError()
             html = fetch(_CHAPTER_URL.format(book_id=book_id, cid=cid))
@@ -140,7 +146,10 @@ class Biquge(Source):
             if not ctext:
                 skipped += 1
                 continue
-            chapters.append(Chapter(title=ctitle or toc_title, text=ctext))
+            c = Chapter(title=ctitle or toc_title, text=ctext)
+            chapters.append(c)
+            if on_checkpoint:
+                on_checkpoint(i, c)
         content = "\n\n".join(c.text for c in chapters)
         title = book.title or f"biquge-{book_id}"
         return FetchResult(

@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 from ..model import Book, FetchResult
-from ..util import FetchError, fetch, fetch_bytes
+from ..util import FetchError, fetch, fetch_bytes, fetch_bytes_resumable
 from .base import Source
 
 _MIRRORS = [
@@ -121,16 +121,26 @@ class Libgen(Source):
             )
         return books
 
-    def fetch(self, book: Book, *, on_progress=None) -> FetchResult:
+    def fetch(self, book: Book, *, on_progress=None, on_checkpoint=None, resume_from=0) -> FetchResult:
         md5 = book.id.strip().lower()
         if not re_fullmatch_hex(md5):
             raise ValueError(f"libgen id must be a 32-char md5, got {book.id!r}")
         m = book.extra.get("mirror") or self._first()
         ext = book.extra.get("extension") or "bin"
-        data = fetch_bytes(f"https://{m}/get.php?md5={md5}")
+        # B4 断点续传：大文件流式落盘 + Range 续传（中断残留 .part 是下次起点）
+        from ..fetch_cache import partial_dir
+
+        part = partial_dir() / f"{md5}.part"
+        try:
+            data = fetch_bytes_resumable(f"https://{m}/get.php?md5={md5}", part)
+        except Exception:
+            part.unlink(missing_ok=True)  # 挑战页/校验失败的残留丢弃，防续传串味
+            raise
         head = data[:512].lstrip().lower()
         if head.startswith(b"<!doctype") or head.startswith(b"<html") or b"cloudflare" in head:
+            part.unlink(missing_ok=True)
             raise FetchError(f"libgen {m} returned a page, not the file (CF challenge / dead link)")
+        part.unlink(missing_ok=True)  # 成功：已进缓存区，清 scratch
         return FetchResult(
             source=self.name,
             id=md5,

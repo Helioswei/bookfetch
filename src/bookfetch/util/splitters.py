@@ -41,6 +41,10 @@ _SEQ_RE = re.compile(r"^[一二三四五六七八九十百〇零]{1,3}[、.．]\
 _SENT_PUNCT = set("，。；：、！？!?；：,.;:")  # a real sentence never lacks these
 # 5) bookfetch's own rendered marker: === 章节标题 ===
 _MARK_RE = re.compile(r"^===\s*(.+?)\s*===$")
+# 6) English chapter headers (Gutenberg txt): "CHAPTER I" / "Chapter 1" /
+#    "CHAP. XII" — standalone lines, prefix required so roman-page-number
+#    footers ("iii" alone on a line) can never match.
+_EN_RE = re.compile(r"^(?:CHAPTER|CHAP\.?)\s+(?:[0-9]+|[IVXLCDM]+)\.?\s*$", re.IGNORECASE)
 
 
 def _heading(line: str) -> str | None:
@@ -53,6 +57,8 @@ def _heading(line: str) -> str | None:
     if _NUM_RE.match(s):
         return s
     if _SEQ_RE.match(s):
+        return s
+    if _EN_RE.match(s):
         return s
     if s in _BARE:
         return s

@@ -102,7 +102,7 @@ class Ctext(Source):
         page = fetch(SEARCH_URL.format(q=quote(query)))
         return _parse_search_page(page)
 
-    def fetch(self, book: Book, *, on_progress=None) -> FetchResult:
+    def fetch(self, book: Book, *, on_progress=None, on_checkpoint=None, resume_from=0) -> FetchResult:
         """Fetch a whole book: res page -> ordered wiki pages -> chapters.
 
         Each wiki page becomes one or more chapters: standalone 《》/卷

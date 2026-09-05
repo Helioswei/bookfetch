@@ -299,6 +299,19 @@ function pollTask(taskId, el, spec) {
       el.querySelector('.x').onclick = () => el.remove();
       return;
     }
+    if (r.status === 'queued') {
+      msg.textContent = '排队中…（同时最多下 3 本）';
+      bar.classList.add('idle');
+      if (!el.querySelector('.t-ops .cancel')) {
+        taskOps(el, `<button class="mini cancel">取消</button>`)
+          .querySelector('.cancel').onclick = async () => {
+            el.querySelector('.t-ops').innerHTML = '<span class="cancelling">取消中…</span>';
+            try { await BF.api('cancel', { task_id: taskId }); } catch { /* 任务可能已完成 */ }
+          };
+      }
+      setTimeout(tick, 1200);
+      return;
+    }
     // running：有 progress → 百分比进度；否则阶段文字 + 流动动画
     const i = bar && bar.querySelector('i');
     if (r.progress && r.progress.total) {
@@ -308,6 +321,16 @@ function pollTask(taskId, el, spec) {
     } else {
       msg.textContent = r.message || '下载中…';
       if (bar) bar.classList.add('idle');
+    }
+    // B4 边下边读：已下部分可先读（库内 .part，断点续传不中断）
+    if (r.partial_rel && !el.querySelector('.t-ops .open-part')) {
+      const ops = el.querySelector('.t-ops');
+      const btn = document.createElement('button');
+      btn.className = 'mini open-part';
+      btn.textContent = `读已下 ${r.progress ? r.progress.done : ''} 章`;
+      btn.title = '下载完成前先读已抓到的章节（继续下载不受影响）';
+      btn.onclick = () => { openReader(r.partial_rel); };
+      ops.appendChild(btn);
     }
     if (!el.querySelector('.t-ops .cancel')) {
       taskOps(el, `<button class="mini cancel">取消</button>`)

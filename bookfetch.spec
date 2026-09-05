@@ -1,16 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
-import os
 from PyInstaller.utils.hooks import collect_all
 
 datas = [('src/bookfetch/static', 'bookfetch/static')]
-# N3 macOS 系统翻译桥（swiftc 产物；translator.py 在 _MEIPASS/bookfetch/translate_bridge 定位）
-if os.path.exists('packaging/build/translate_bridge'):
-    datas.append(('packaging/build/translate_bridge', 'bookfetch'))
-# N3 翻译语言包准备器（独立 .app，首次翻译未装语言包时 open 拉起）
-# datas 目录是平铺拷贝：源须指向 .app/Contents 以保留 Contents 内结构
-if os.path.exists('packaging/activator/TranslationActivator.app/Contents'):
-    datas.append(('packaging/activator/TranslationActivator.app/Contents',
-                  'bookfetch/TranslationActivator.app/Contents'))
 binaries = []
 hiddenimports = []
 tmp_ret = collect_all('webview')

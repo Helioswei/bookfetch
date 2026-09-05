@@ -46,6 +46,24 @@ def _ensure_chapters(fr: FetchResult) -> list[Chapter]:
     return [Chapter(title=fr.title or fr.id, text=fr.content)]
 
 
+def _strip_dup_heading(c: Chapter) -> Chapter:
+    """Drop a heading line duplicated inside its own chapter text.
+
+    split_headings keeps the heading inside the body for lossless roundtrip;
+    rendered output already carries the title (txt ``=== t ===`` / epub h1),
+    so a body line identical to the title is redundant. The first such line
+    is dropped wherever it sits (chapter one may carry a short preamble
+    before its heading; later chapters start with it directly).
+    """
+    lines = c.text.splitlines()
+    for k, ln in enumerate(lines):
+        if ln.strip() == c.title:
+            if len(lines) > 1:
+                return Chapter(title=c.title, text="\n".join(lines[:k] + lines[k + 1 :]).strip())
+            return c
+    return c
+
+
 def _render_get(src, fr: FetchResult, args) -> FetchResult:
     """Optional simplify -> render txt/epub under --out.
 
@@ -65,6 +83,11 @@ def _render_get(src, fr: FetchResult, args) -> FetchResult:
         return fr
 
     chapters = _ensure_chapters(fr)
+    # heading-split 出的章节，标题行保留在 text 首行（split_headings lossless
+    # 契约）；渲染成品（txt === 分隔 / epub 目录）里标题已在章节头，正文首行
+    # 重复的标题行剥掉（2026-09-05 英文切章起通用生效，中文同样受益）
+    if fr.chapters is None:
+        chapters = [_strip_dup_heading(c) for c in chapters]
 
     if args.simplify:
         chapters = [Chapter(title=to_simplified(c.title), text=to_simplified(c.text)) for c in chapters]

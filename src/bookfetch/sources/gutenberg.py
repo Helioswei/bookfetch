@@ -100,7 +100,7 @@ class Gutenberg(Source):
         page = fetch(SEARCH_URL.format(q=query.strip().replace(" ", "+")))
         return _parse_search_page(page)
 
-    def fetch(self, book: Book, *, on_progress=None) -> FetchResult:
+    def fetch(self, book: Book, *, on_progress=None, on_checkpoint=None, resume_from=0) -> FetchResult:
         eid = book.id
         if not eid.isdigit():
             raise ValueError(f"gutenberg id must be an ebook number, got: {book.id!r}")

@@ -169,7 +169,7 @@ class _FakeSrc:
     def __init__(self):
         self.calls = 0
 
-    def fetch(self, book, *, on_progress=None):
+    def fetch(self, book, *, on_progress=None, on_checkpoint=None, resume_from=0):
         self.calls += 1
         return FetchResult(
             source="fake", id=book.id, title=book.title or "假书",
@@ -196,7 +196,7 @@ def test_download_cancel_sets_cancelled_status(env, monkeypatch):
     class _CancelSrc:
         name = "cancelsrc"
 
-        def fetch(self, book, *, on_progress=None):
+        def fetch(self, book, *, on_progress=None, on_checkpoint=None, resume_from=0):
             if on_progress and not on_progress(0, 10):
                 raise CancelledError()  # what a real multi-chapter source does
             raise AssertionError("on_progress must have returned False after cancel")
@@ -217,6 +217,112 @@ def test_cancel_unknown_and_finished(env, monkeypatch):
     _wait_task(r["task_id"])
     st = n2core.cancel(r["task_id"])
     assert st["ok"] is False and "已完成" in st["message"]
+
+
+def test_download_queue_caps_concurrency_and_queued_cancel(env, monkeypatch):
+    """并发上限 3：第 4 个任务 queued；排队中的任务可直接取消不阻塞。"""
+    import threading
+
+    gate = threading.Event()
+    active = []
+
+    class _GateSrc:
+        name = "gatesrc"
+
+        def fetch(self, book, *, on_progress=None, on_checkpoint=None, resume_from=0):
+            active.append(book.id)
+            gate.wait(5)
+            return FetchResult(
+                source=self.name, id=book.id, title=f"门卫{book.id}",
+                chars=4, lines=1, format="txt",
+                content="正文", chapters=[Chapter("章", "正文")],
+            )
+
+    monkeypatch.setattr("bookfetch.n2core.get_source", lambda name: _GateSrc())
+    ids = [n2core.download("gatesrc", str(i), title=f"门卫{i}", fmt="txt")["task_id"] for i in range(4)]
+    try:
+        t0 = time.time()
+        while len(active) < 3 and time.time() - t0 < 5:
+            time.sleep(0.02)
+        assert len(active) == 3, "前 3 个任务应同时进入 fetch（并发上限 3）"
+        assert n2core.task_status(ids[3])["status"] == "queued"
+        st = n2core.cancel(ids[3])
+        assert st["ok"] is True
+        assert _wait_task(ids[3])["status"] == "cancelled"
+    finally:
+        gate.set()  # 释放卡住的 fetch，防槽位泄漏卡死后续测试
+    for tid in ids[:3]:
+        assert _wait_task(tid)["status"] == "done"
+
+
+def test_b4_partial_survives_cancel_and_resumes(env, monkeypatch):
+    """B4 断点续传：取消后 .part+meta 保留 → 重下同书自动续传 → 完成清理。
+
+    边下边读：下载中任务能通过 task_status.partial_rel 打开已下部分。
+    """
+    import threading
+
+    from bookfetch.util import CancelledError
+
+    class _ChSrc:
+        name = "chsrc"
+
+        def __init__(self):
+            self.gate = threading.Event()  # 章间门闩：模拟真实网络延迟
+            self.resume_seen = []
+            self.fetched = []  # 成功章 toc 索引
+
+        def fetch(self, book, *, on_progress=None, on_checkpoint=None, resume_from=0):
+            self.resume_seen.append(resume_from)
+            chs = []
+            for i in range(resume_from, 10):
+                if len(self.fetched) >= 5:
+                    self.gate.wait(5)  # 抓满 5 章后停下等主线程（模拟慢网）
+                if on_progress and not on_progress(i, 10):
+                    raise CancelledError()
+                c = Chapter(title=f"第{i}章", text=f"正文{i}")
+                chs.append(c)
+                self.fetched.append(i)
+                if on_checkpoint:
+                    on_checkpoint(i, c)
+            return FetchResult(
+                source=self.name, id=book.id, title="长夜书", chars=0, lines=0,
+                format="txt", content="", chapters=chs,
+            )
+
+    s = _ChSrc()
+    monkeypatch.setattr("bookfetch.n2core.get_source", lambda name: s)
+
+    # 第一次下载：抓满 5 章后取消
+    r1 = n2core.download("chsrc", "7", title="长夜书", fmt="txt")
+    t0 = time.time()
+    while len(s.fetched) < 5 and time.time() - t0 < 10:
+        time.sleep(0.02)
+    assert n2core.cancel(r1["task_id"])["ok"] is True
+    s.gate.set()  # 放行：源撞上 on_progress → CancelledError
+    assert _wait_task(r1["task_id"])["status"] == "cancelled"
+
+    # 取消后：.part（可读）+ meta 保留
+    part = env / "Books" / "长夜书.txt.part"
+    meta = env / "Books" / "长夜书.txt.part.meta"
+    assert part.exists() and meta.exists()
+    st = n2core.task_status(r1["task_id"])
+    assert st["partial_rel"] == "长夜书.txt.part"
+    # .part 打开即可读（split_rendered 还原 5 章）
+    ob = n2core._open(part)
+    assert [c.title for c in ob.chapters] == [f"第{i}章" for i in range(5)]
+
+    # 第二次下载同书：自动续传（resume_from=5），只抓尾段
+    r2 = n2core.download("chsrc", "7", title="长夜书", fmt="txt")
+    assert _wait_task(r2["task_id"])["status"] == "done"
+    assert s.resume_seen == [0, 5], s.resume_seen
+    assert len(s.fetched) == 10  # 0..4 + 5..9，无重复无遗漏
+    # 完成：.part/meta 清理，正式书完整 10 章
+    assert not part.exists() and not meta.exists()
+    shelf_books = {b["rel"]: b for b in n2core.shelf()["books"]}
+    assert "长夜书.txt" in shelf_books
+    ob = n2core._open(env / "Books" / "长夜书.txt")
+    assert [c.title for c in ob.chapters] == [f"第{i}章" for i in range(10)]
 
 
 def test_download_writes_into_library(env, monkeypatch):
@@ -247,7 +353,7 @@ def test_download_raw_passthrough(env, monkeypatch):
     class _RawSrc:
         name = "rawsrc"
 
-        def fetch(self, book, *, on_progress=None):
+        def fetch(self, book, *, on_progress=None, on_checkpoint=None, resume_from=0):
             return FetchResult(
                 source="rawsrc", id=book.id, title="PDF书",
                 chars=0, lines=0, format="pdf", content="", chapters=None,

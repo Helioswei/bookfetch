@@ -204,7 +204,7 @@ class Wikisource(Source):
     def search(self, query: str) -> list[Book]:
         return _search_json(fetch(search_url(self.host, query)), self.host, self.name)
 
-    def fetch(self, book: Book, *, on_progress=None) -> FetchResult:
+    def fetch(self, book: Book, *, on_progress=None, on_checkpoint=None, resume_from=0) -> FetchResult:
         title = book.id
         main_html = _parse_payload(fetch(parse_url(self.host, title)))
         toc = extract_toc_titles(main_html)

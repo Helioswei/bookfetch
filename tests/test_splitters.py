@@ -75,3 +75,38 @@ def test_split_rendered_roundtrip():
     assert chs[0].text == "正文一。"
     assert chs[1].text == "正文二。"
     assert split_rendered("無標記的純文本。") == []
+
+
+def test_english_chapter_headers():
+    # Gutenberg txt 英文书：CHAPTER I / Chapter 12 / CHAP. IV —— 章标题行独立成章
+    lines = [
+        "The Project Gutenberg EBook of Alice",
+        "CHAPTER I",
+        "",
+        "Down the Rabbit-Hole",
+        "",
+        "Alice was beginning to get very tired.",
+        "",
+        "CHAPTER II",
+        "",
+        "The pool was getting quite crowded.",
+        "",
+        "Chapter 12",
+        "",
+        "iii",
+        "",
+        "CHAP. IV",
+        "",
+        "End of the book.",
+    ]
+    chs = split_headings(lines)
+    assert [c.title for c in chs] == ["CHAPTER I", "CHAPTER II", "Chapter 12", "CHAP. IV"]
+    assert _text(chs) == "\n".join(lines)  # lossless roundtrip 契约不破
+    # 正文里的纯罗马数字页脚行（iii）永远不是标题
+    assert all("iii" != c.title for c in chs)
+
+
+def test_english_prose_lines_never_split():
+    # 正文长句 / 含标点的行不是英文标题
+    lines = ["CHAPTER I was a busy time for Alice.", "She read Chapter 12 aloud.", "the CHAPTER of fate opened."]
+    assert split_headings(lines) == []

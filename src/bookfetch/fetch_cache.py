@@ -36,6 +36,19 @@ def _cache_dir() -> Path:
     return d
 
 
+def partial_dir() -> Path:
+    """Scratch area for interrupted single-file downloads (B4 resume).
+
+    fetch_bytes_resumable keeps a ``.part`` file here between attempts;
+    a completed download is stored as the real cache entry and the
+    .part is removed.
+    """
+    base = os.environ.get("BOOKFETCH_CACHE") or Path.home() / ".cache" / "bookfetch"
+    d = Path(base) / "partial"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def _key(source: str, id_: str) -> str:
     return hashlib.sha1(f"{source}|{id_}".encode("utf-8")).hexdigest()[:24]
 
