@@ -15,6 +15,7 @@ bookfetch serve               # 浏览器 UI（搜索/书架/阅读器），自�
 ## 特性
 
 - 书源路由：按书种/语言分发到可用源，单个源故障不影响整体（errors 独立上报）
+- **外文原版中文书名直达**：搜「傲慢和偏见」「百年孤独」这类中文书名，自动用标准英文名检索古登堡/维基文库英文站（内置高频书名词典 + Mac 系统翻译兜底，结果区透明标注实际检索的英文名）
 - **EPUB / 章节感知**：`--format epub` 零依赖生成手机可读的 epub（含目录）；`--split`
   在 txt 中插入章节分隔；古籍《》/卷/序跋类标题行自动识别为章节
 - **中英双向翻译（Mac 阅读器，macOS 26.4+）**：章节内一键整章逐段沉浸式对照
@@ -37,9 +38,17 @@ bookfetch serve               # 浏览器 UI（搜索/书架/阅读器），自�
 
 数据完全本地：搜索从公开书源抓取，下载文件只落在你自己的 `~/Books`，不经过任何中间服务器。
 
+### 桌面 App（Windows）
+
+1. 下载 Windows 版 zip（GitHub Releases 页的 `bookfetch-windows-x64.zip`），解压出 `bookfetch.exe`
+2. 首次运行：未签名程序会触发 SmartScreen——点「更多信息」→「仍要运行」放行一次即可
+3. 书库在 `C:\Users\<你>\Books`（首次启动自动创建）
+
+> Windows 版由 CI 自动构建（mac 之外暂无实机全量验证），如遇问题欢迎提 issue。
+
 界面右上角 ⚙ 设置可配网络代理（三选：跟随系统=默认 / 手动代理 / 直连）——被墙书源（wikisource、libgen）需要代理才能访问；Clash 等代理软件开着「系统代理」开关即零配置生效。
 
-> 签名/平台状态：mac 版暂未签名（上述右键打开一次即可，签名需 Apple 开发者账号 $99/年）；Windows 版打包在规划中（需 CI 构建）；非 Mac 用户可走下方 CLI 方式。
+> 签名/平台状态：mac 版暂未签名（上述右键打开一次即可，签名需 Apple 开发者账号 $99/年）；Windows 版同为未签名 CI 产物（上述 SmartScreen 放行一次即可）；Linux 用户可走下方 CLI 方式。
 
 ### Python / CLI（开发者 / agent）
 
@@ -143,13 +152,14 @@ bookfetch get ctext 727782 --out ./books --simplify
 
 | 形态 | 启动方式 | 适合谁 |
 |---|---|---|
-| 桌面 App | 双击 `bookfetch.app`（见安装） | 普通用户 |
+| 桌面 App（Mac） | 双击 `bookfetch.app`（见安装） | 普通用户 |
+| 桌面 App（Windows） | 双击 `bookfetch.exe`（见安装） | 普通用户 |
 | 桌面 App（源码） | `uv sync --extra gui && bookfetch gui` | 开发者 |
 | 浏览器 UI | `bookfetch serve`（自动开浏览器） | 开发者/局域网预览 |
 
 界面三个视图：
 
-- **搜索**：选书源胶囊（或"全部"并行搜索）→ 输入书名 → 朱红按钮搜索；结果卡片可直接下载原文件 / txt / epub
+- **搜索**：选书籍分类（全部 / 中文古籍 / 中文近代 / 网络小说 / 外文原版）→ 输入书名 → 朱红按钮搜索，分类下并行检索组内全部源；结果卡片可直接下载原文件 / txt / epub。**搜外文原版时直接输中文书名即可**——自动用标准英文名检索英文站（结果区会标注实际用的英文名）；搜不到且有可读原因时（如该书尚未进入公版）会明确提示
 - **书架**：书库（默认 `~/Books`，桌面 App 可用环境变量 `BOOKFETCH_LIBRARY` 改）里的全部藏书，每行带续读进度条；点行即续读。下载中的书以「未完成」条目上架（红框），可直接读已下部分；下载完成自动换成正式条目、阅读进度无缝继承
 - **阅读器**：书页排版（衬线/行距/夜间模式可调），进度自动记忆；支持深链 `#shelf` / `#reader/书名` 直达
 
@@ -182,7 +192,7 @@ bookfetch get ctext 727782 --out ./books --simplify
 | wikisource | 中文/英文公版书（含现代公版：鲁迅等） | MediaWiki API + 渲染页解析，目录自动展开整本；大陆访问需代理 |
 | gutenberg | 英文公版书 7 万+（小说/非小说） | 搜索页 → PG 官方 txt（自动剥离 Gutenberg 许可头尾）；大陆直连 |
 | biquge | 中文现代网文/小说（笔趣阁镜像，繁体） | 搜索 → 目录 → 逐章正文（章节级 txt）；大陆直连；⚠️ 版权期内内容自审，见下 |
-| libgen | 英文现代书（原文件 epub/pdf） | 探活式镜像链（域名轮换频繁），当前镜像不可达时会明确报错；需代理 |
+| libgen | 英文现代书（原文件 epub/pdf） | ⚠️ 官方 2024 起迁移新版站（登录 + API keys），匿名搜索接口已停用，此源待适配；英文现代书暂缺此渠道——公版英文书可走古登堡/维基文库 |
 
 > 网络提示：ctext/github/gutenberg/biquge 大陆直连可用；wikisource（Wikimedia）与 libgen 大陆直连不通，
 > 需能访问对应站点的网络环境（如代理），本工具遵循系统 http_proxy/https_proxy 环境变量。
@@ -232,12 +242,12 @@ uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 bash scripts/release.sh v1.0.0     # 打 tag 并推送 → Release 附件出现 mac/win zip + PyPI 自动发布
 ```
 
-- **PyPI 自动发布**（tag v* 时由 `pypi` workflow 构建 sdist+wheel 并上传，走 Trusted Publisher OIDC 无 token）：需在 PyPI 项目设置一次性绑定 `Helioswei/bookfetch`（Publishing → Add trusted publisher，workflow name 填 `pypi`）。发布前先 bump `pyproject.toml` 版本号并提交（workflow 会校验 tag == pyproject 版本，不一致即拦）
+- **PyPI 自动发布**（tag v* 时由 `pypi` workflow 构建 sdist+wheel 并上传，走 Trusted Publisher OIDC 无 token）：需在 PyPI 项目设置一次性绑定 `Helioswei/bookfetch`（Publishing → Add trusted publisher，workflow name 填 **`pypi.yml`**，environment 留空）。发布前先 bump `pyproject.toml` 版本号并提交（workflow 会校验 tag == pyproject 版本，不一致即拦）
 
 ## 更新记录与路线图
 
-详细版本历史见 [CHANGELOG.md](CHANGELOG.md)。当前：0.3/0.4 开发期已完成，**1.0.0 稳定版规划中**。
-下一步候选：Windows 端翻译（在线 provider）、Apple 签名、手机 App——欢迎提 issue 排优先级。
+详细版本历史见 [CHANGELOG.md](CHANGELOG.md)。**当前稳定版：v1.0.0**（0.x 开发期 2026-09-03 ~ 09-05 完结）。
+下一步候选：libgen 新版站适配（英文现代书渠道）、Windows 端翻译（在线 provider）、Apple 签名、手机 App——欢迎提 issue 排优先级。
 
 ## 许可
 
