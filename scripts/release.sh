@@ -2,7 +2,7 @@
 # 一键发版：打 tag 并推送 → GitHub Actions 自动构建 mac/win 桌面包挂到 Release + PyPI 发布。
 # 版本单一事实源 = pyproject.toml：tag 自动取 [project] version（勿再手传版本号，杜绝双写漏改）。
 # 用法: bash scripts/release.sh           # tag = pyproject 的 version
-#       bash scripts/release.sh v1.0.1    # 可选：显式传参（会校验 == pyproject version，不一致即退出）
+#       bash scripts/release.sh vX.Y.Z    # 可选：显式传参（会校验 == pyproject version，不一致即退出）
 set -euo pipefail
 
 # 从 pyproject.toml 提取版本（格式固定：version = "x.y.z"）
