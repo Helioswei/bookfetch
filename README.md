@@ -235,14 +235,8 @@ uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 
 ## 发布（桌面包 + PyPI）
 
-- **每次推 main**：GitHub Actions 自动构建 mac/win 桌面包 → Actions artifact（最新包随时可取）
-- **正式发版**（一条命令，触发构建并挂到 Release 页）：
-
-```bash
-bash scripts/release.sh v1.0.0     # 打 tag 并推送 → Release 附件出现 mac/win zip + PyPI 自动发布
-```
-
-- **PyPI 自动发布**（tag v* 时由 `pypi` workflow 构建 sdist+wheel 并上传，走 Trusted Publisher OIDC 无 token）：需在 PyPI 项目设置一次性绑定 `Helioswei/bookfetch`（Publishing → Add trusted publisher，workflow name 填 **`pypi.yml`**，environment 留空）。发布前先 bump `pyproject.toml` 版本号并提交（workflow 会校验 tag == pyproject 版本，不一致即拦）
+- **日常推 main**：自动构建 mac/win 桌面包 → Actions artifact（最新包随时可取），不发布任何正式版
+- **正式发版**（一条命令，仅打 tag 触发）：`bash scripts/release.sh v1.0.0`——tag 推送后 Release 页自动挂出 mac/win zip，PyPI 同步发布（Trusted Publisher 已绑定，无需 token；pypi workflow 校验 tag == pyproject.toml 版本，不一致即拦）
 
 ## 更新记录与路线图
 
