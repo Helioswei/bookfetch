@@ -204,6 +204,11 @@ def search(query: str, sources: list[str] | None = None, limit: int = 30) -> dic
     """Search across sources in parallel (GUI: a slow/dead source must not
     stall the whole grid; CLI keeps its own serial search_all)."""
     names = sources or source_names()
+    # 全源模式（sources=None = 「全部」分类）每源配额：防单源刷屏
+    # （外文源机翻假阳性等）挤占其他源；分类模式不限额，保持现状。
+    per_source: int | None = None
+    if sources is None:
+        per_source = 10
     out: list[dict] = []
     errors: dict[str, str] = {}
 
@@ -223,8 +228,12 @@ def search(query: str, sources: list[str] | None = None, limit: int = 30) -> dic
             return
         try:
             q = translated["to"] if (translated and n in _FOREIGN_SOURCES) else query
+            mine: list[dict] = []
             for b in src.search(q):
-                out.append(b.to_dict())
+                mine.append(b.to_dict())
+                if per_source and len(mine) >= per_source:
+                    break
+            out.extend(mine)
         except Exception as e:  # noqa: BLE001 — per-source failures are reported, not fatal
             logger.warning("search source %s failed: %s", n, e, exc_info=True)
             errors[n] = friendly(e)
@@ -238,7 +247,13 @@ def search(query: str, sources: list[str] | None = None, limit: int = 30) -> dic
     for n, t in zip(names, threads):
         if t.is_alive() and n not in errors:
             errors[n] = "TimeoutError: source did not respond in 20s"
-    out.sort(key=lambda d: d.get("title", ""))
+    # 语言匹配优先排序：中文 query → 中文标题结果在前（外文源假阳性不挤占
+    # 首屏）；英文 query 第一项恒 0，退化为纯标题字母序（原行为）。
+    cjk_query = bool(_CJK_RE.search(query))
+    out.sort(key=lambda d: (
+        0 if (cjk_query and _CJK_RE.search(d.get("title", ""))) else 1,
+        d.get("title", ""),
+    ))
     # 外文书名引导（2026-09-05 少爷实测「傲慢和偏见」外文原版 0 结果而
     # pride and prejudice 可搜）：中文 query + 外文源全 0 + 至少一个正常执行
     # （全挂不提示，避免误导「去搜英文名」而源本身不可用）。翻译可用时已按
