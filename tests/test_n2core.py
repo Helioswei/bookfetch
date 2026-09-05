@@ -718,8 +718,16 @@ def test_import_book_roundtrip_dedup_and_sanitize(env):
         n2core.import_book("evil.pdf", _b64(b"x"))
 
 
-def test_open_library_opens_finder_on_macos(env, monkeypatch):
+def test_open_library_platform_dispatch(env, monkeypatch):
+    """open_library 按平台分派打开命令（macOS open / Windows explorer）——断言随平台，
+    否则 Windows CI 必红（2026-09-05 212473f build windows-x64 实锤）。"""
     calls = []
     monkeypatch.setattr(n2core.subprocess, "Popen", lambda cmd, **kw: calls.append(cmd))
     r = n2core.open_library()
-    assert r["ok"] and calls == [["open", str(env / "Books")]]
+    assert r["ok"]
+    expect = (
+        ["open", str(env / "Books")]
+        if sys.platform == "darwin"
+        else ["explorer", str(env / "Books")]
+    )
+    assert calls == [expect]
