@@ -1,7 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('src/bookfetch/static', 'bookfetch/static')]
+datas = [
+    ('src/bookfetch/static', 'bookfetch/static'),
+    # 翻译桥 + 激活器（坑 39：Contents 内结构保留；onedir 剥离 app 名前缀后
+    # translator 双形态查找兜住）。编译产物 gitignored——本机直接打；CI 的
+    # desktop-build action 须先 build_translator.sh/build_activator.sh 再 pyinstaller。
+    ('packaging/build/translate_bridge', 'bookfetch'),
+    ('packaging/activator/TranslationActivator.app/Contents', 'bookfetch/TranslationActivator.app/Contents'),
+]
 binaries = []
 hiddenimports = []
 tmp_ret = collect_all('webview')

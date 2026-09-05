@@ -731,3 +731,39 @@ def test_open_library_platform_dispatch(env, monkeypatch):
         else ["explorer", str(env / "Books")]
     )
     assert calls == [expect]
+
+
+def test_import_dialog_unavailable_without_hook():
+    """serve/浏览器形态（无壳 hook）→ unavailable，前端回退 HTML file input。"""
+    assert n2core.import_dialog() == {"unavailable": True}
+
+
+def test_import_dialog_hook_imports_and_reports_failures(env, monkeypatch):
+    """壳 hook 返回文件路径 → 逐个导入：合法 txt 入库存重名序号，非 txt/epub 收进
+    failed 不中断；_import_bytes 与 import_book 共用同一条写库核心。"""
+    src = env / "src"
+    src.mkdir()
+    good = src / "甲书.txt"
+    good.write_text("第一章\n\n正文", encoding="utf-8")
+    # 库中已有同名 甲书.txt → 导入应自动生成 甲书(1).txt（与 import_book 同核心）
+    n2core.import_book("甲书.txt", _b64("已有内容".encode("utf-8")))
+    bad = src / "evil.pdf"
+    bad.write_bytes(b"%PDF-fake")
+    empty = src / "空.txt"
+    empty.write_bytes(b"")
+    monkeypatch.setattr(
+        n2core, "_IMPORT_DIALOG_HOOK", lambda: [str(good), str(bad), str(empty)]
+    )
+    r = n2core.import_dialog()
+    assert r["imported"] == ["甲书(1)"]  # 重名自动序号（与 import_book 同核心）
+    assert (env / "Books" / "甲书(1).txt").read_text(encoding="utf-8") == "第一章\n\n正文"
+    assert len(r["failed"]) == 2
+    assert any("evil.pdf" in f for f in r["failed"])
+    assert any("空.txt" in f for f in r["failed"])
+
+
+def test_import_dialog_cancelled(env, monkeypatch):
+    """hook 返回 None（用户在原生面板点了取消）→ cancelled，不写库不报错。"""
+    monkeypatch.setattr(n2core, "_IMPORT_DIALOG_HOOK", lambda: None)
+    assert n2core.import_dialog() == {"cancelled": True}
+    assert not list((env / "Books").glob("*.txt"))

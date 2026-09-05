@@ -561,20 +561,28 @@ def delete_book(rel: str) -> dict:
     return {"ok": True, "deleted": gone}
 
 
-def import_book(name: str, data_b64: str) -> dict:
-    """导入用户本地书（txt/epub）：base64 → 写书库上架。
+_IMPORT_DIALOG_HOOK: Callable | None = None
 
-    重名不覆盖——自动加序号（名.txt → 名(1).txt）后返回实际 rel。
+
+def set_import_dialog_hook(fn: Callable | None) -> None:
+    """桌面壳注入原生"选文件"对话框实现（gui_app 注册；serve/CLI 不注册）。
+
+    fn() -> list[str] | None：在壳主线程弹 NSOpenPanel 多选，返回选中文件的
+    绝对路径列表；用户取消返回 None。n2core 保持平台无关——HTTP/浏览器形态
+    无 hook，import_dialog() 返回 unavailable，前端回退 HTML file input。
+    背景：壳内 WebKit file-input 委托链（runOpenPanel → NSOpenPanel）首次点击
+    面板不呈现（pywebview 的 file-dialog 路径漏了 runModal 前的 app 激活，其
+    alert 对话框有），故壳内导入绕开 file input 走后端原生对话框。
     """
-    import base64
+    global _IMPORT_DIALOG_HOOK
+    _IMPORT_DIALOG_HOOK = fn
 
+
+def _import_bytes(name: str, raw: bytes) -> dict:
+    """导入核心：校验扩展名 + 重名自动序号 + 写书库（import_book/import_dialog 共用）。"""
     name = Path(name or "").name  # 只取文件名（去路径防目录穿越）
     if not name.lower().endswith((".txt", ".epub")):
         raise ValueError("只支持导入 .txt / .epub 文件")
-    try:
-        raw = base64.b64decode(data_b64, validate=True)
-    except Exception:
-        raise ValueError("导入数据损坏（base64 解码失败）——请重试") from None
     if not raw:
         raise ValueError("文件为空——请选择有效的书籍文件")
     root = library_dir()
@@ -587,6 +595,43 @@ def import_book(name: str, data_b64: str) -> dict:
         n += 1
     cand.write_bytes(raw)
     return {"ok": True, "rel": library_rel(cand), "title": cand.stem}
+
+
+def import_book(name: str, data_b64: str) -> dict:
+    """导入用户本地书（txt/epub）：base64 → 写书库上架（重名自动加序号）。"""
+    import base64
+
+    name = Path(name or "").name  # 只取文件名（去路径防目录穿越）
+    if not name.lower().endswith((".txt", ".epub")):
+        raise ValueError("只支持导入 .txt / .epub 文件")
+    try:
+        raw = base64.b64decode(data_b64, validate=True)
+    except Exception:
+        raise ValueError("导入数据损坏（base64 解码失败）——请重试") from None
+    return _import_bytes(name, raw)
+
+
+def import_dialog() -> dict:
+    """桌面壳原生文件对话框导入——点击即弹，无 WebKit file-input 首击丢失。
+
+    壳内 hook（gui_app 注册）在主线程弹 NSOpenPanel 多选 → 逐文件走
+    _import_bytes；单个失败不中断。serve/浏览器形态（无 hook）返回
+    unavailable，前端回退 HTML file input（浏览器原生选择器无此问题）。
+    """
+    fn = _IMPORT_DIALOG_HOOK
+    if fn is None:
+        return {"unavailable": True}
+    paths = fn()
+    if not paths:
+        return {"cancelled": True}
+    ok, bad = [], []
+    for p in paths:
+        try:
+            r = _import_bytes(Path(p).name, Path(p).read_bytes())
+            ok.append(r["title"])
+        except Exception as e:  # noqa: BLE001 —— 单文件失败不中断整体导入
+            bad.append(f"{Path(p).name}（{e}）")
+    return {"imported": ok, "failed": bad}
 
 
 def open_library() -> dict:
@@ -880,6 +925,8 @@ def api_call(name: str, params: dict) -> dict:
         return delete_book(params.get("rel", ""))
     if name == "import_book":
         return import_book(params.get("name", ""), params.get("data", ""))
+    if name == "import_dialog":
+        return import_dialog()
     if name == "open_library":
         return open_library()
     if name == "shelf":
@@ -909,7 +956,7 @@ def api_call(name: str, params: dict) -> dict:
 
 BUILTIN_API = {
     "search", "download", "cancel", "resume_partial", "delete_book", "import_book",
-    "open_library", "task_status", "shelf", "open_book",
+    "import_dialog", "open_library", "task_status", "shelf", "open_book",
     "chapter", "translate", "open_activator", "progress_get", "progress_set",
     "library", "sources", "settings_get", "settings_set",
 }

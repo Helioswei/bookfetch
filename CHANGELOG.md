@@ -2,6 +2,16 @@
 
 bookfetch 版本历史。版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)：0.x 为开发期（2026-09-03 ~ 09-05），1.0.0 起为稳定对外版。
 
+## v0.4.x 实测反馈批次 2（2026-09-05，未发版）
+
+少爷实机实测收尾修复：
+
+- **书架导入一次弹出**：桌面壳导入改走后端原生 NSOpenPanel（绕 pywebview file-input 委托链首击丢失——其 alert 对话框有弹框前激活步骤、file dialog 路径没有）；serve/浏览器形态自动回退 HTML file input
+- **主题按钮图标=当前态语义**（简繁按钮同款铁律）：阅读页日间 ☀️ / 夜间 🌙 + 红线；主页 🌗 补暗色激活态（明/暗持久二态原无标记）；⚙️ 等瞬时动作维持无激活态
+- **翻译桥打包修复**：bookfetch.spec datas 补 translate_bridge + TranslationActivator.app（此前分发级 .app 翻译桥缺失靠 dev 兜底）；CI macOS 步骤预编译翻译资产
+- **搜索源三修**：① wikisource 搜索改 `intitle:` 只匹配标题——MediaWiki 全文搜索把正文引用书名的司法文书当结果（搜「百年孤独」命中长宁区法院盗版案判决书）② gutenberg 中文 query percent-encode（原直拼 URL 抛 UnicodeEncodeError，中文搜索必炸）③ libgen 状态文案改真实原因（官方 2024 起迁移新版站登录+API keys，匿名接口停用；适配排 PRD P2）
+- 125 tests 绿（+3 导入对话框 hook 测试）
+
 ## 下一步 / 候选（P2，未排期）
 
 - Windows 端翻译（N3 V2：在线翻译 provider，用户自选服务商自配 key）

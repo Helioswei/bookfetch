@@ -41,9 +41,12 @@ def _strip_tags(s: str) -> str:
 
 def search_url(host: str, query: str, limit: int = 20) -> str:
     q = quote(query)
+    # intitle: 只匹配页面标题——MediaWiki 默认全文搜索会把正文含书名关键词的
+    # 页面当结果（2026-09-05 实测：搜「百年孤独」命中一堆长宁区法院盗版案判决书，
+    # 判决书正文引用书名即命中；维基文库收录司法文书，误命中率极高）
     return (
         f"{API.format(host=host)}?action=query&list=search&srnamespace=0"
-        f"&srlimit={limit}&srsearch={q}{_UA_PARAMS}"
+        f"&srlimit={limit}&srsearch=intitle:{q}{_UA_PARAMS}"
     )
 
 

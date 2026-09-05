@@ -428,7 +428,23 @@ $('#shelf-open-lib').addEventListener('click', async () => {
   try { await BF.api('open_library', {}); }
   catch (e) { alert('无法打开书库目录：' + (e.message || e)); }
 });
-$('#shelf-import').addEventListener('click', () => $('#shelf-import-input').click());
+/* 导入书籍：桌面壳走后端原生对话框（点击即弹，绕 WebKit file-input 首击丢失）；
+   浏览器形态（后端无壳 hook）回退 HTML file input */
+function showImportSummary(ok, bad) {
+  if (!ok.length && !bad.length) return;
+  alert([ok.length ? `已导入 ${ok.length} 本：${ok.join('、')}` : '',
+         bad.length ? `导入失败 ${bad.length} 本：${bad.join('；')}` : ''].filter(Boolean).join('\n'));
+}
+async function pickImportFiles() {
+  let r = null;
+  try { r = await BF.api('import_dialog', {}); }
+  catch (e) { /* 后端异常 → 回退 file input */ }
+  if (!r || r.unavailable) { $('#shelf-import-input').click(); return; }  // 浏览器形态
+  if (r.cancelled) return;                                  // 用户取消
+  if ((r.imported || []).length) loadShelf();
+  showImportSummary(r.imported || [], r.failed || []);
+}
+$('#shelf-import').addEventListener('click', pickImportFiles);
 $('#shelf-import-input').addEventListener('change', (e) => {
   const files = [...(e.target.files || [])];
   if (files.length) importBooks(files);
@@ -464,10 +480,7 @@ async function importBooks(files) {
     } catch (e) { bad.push(`${f.name}（${e.message || e}）`); }
   }
   loadShelf();
-  if (ok.length || bad.length) {
-    alert([ok.length ? `已导入 ${ok.length} 本：${ok.join('、')}` : '',
-           bad.length ? `导入失败 ${bad.length} 本：${bad.join('；')}` : ''].filter(Boolean).join('\n'));
-  }
+  showImportSummary(ok, bad);
 }
 
 /* ---------- 阅读器 ---------- */
@@ -679,8 +692,11 @@ $('#reader-aa').addEventListener('click', () => {
 $('#reader-theme').addEventListener('click', () => {
   state.readerDark = !state.readerDark;
   document.body.dataset.readerDark = state.readerDark ? '1' : '0';
-  $('#reader-theme').textContent = state.readerDark ? '☀️' : '🌙';
+  // 图标 = 当前态（坑 35 铁律同款）：日间 ☀️ / 夜间 🌙 + on 红线——旧版是目标态
+  // （白天显 🌙 提示可切夜）与简繁按钮语义相悖，实测被少爷抓包
+  $('#reader-theme').textContent = state.readerDark ? '🌙' : '☀️';
   $('#reader-theme').classList.toggle('on', state.readerDark);
+  $('#reader-theme').title = state.readerDark ? '夜间模式，点击回日间' : '日间模式，点击夜间阅读';
   try { localStorage.setItem('bf-dark', state.readerDark ? '1' : '0'); } catch {}
 });
 
@@ -694,7 +710,13 @@ $('#tab-theme').addEventListener('click', () => {
   const html = document.documentElement;
   html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
   try { localStorage.setItem('bf-theme', html.dataset.theme); } catch {}
+  syncThemeBtn();
 });
+function syncThemeBtn() {
+  // 全局明/暗是持久二态开关：暗色时 🌗 亮红线（激活态语义与阅读页 🌙 一致）
+  $('#tab-theme').classList.toggle('on', document.documentElement.dataset.theme === 'dark');
+  $('#tab-theme').title = document.documentElement.dataset.theme === 'dark' ? '暗色模式，点击回亮色' : '亮色模式，点击暗色阅读';
+}
 $('#search-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const q = $('#search-q').value.trim();
@@ -713,13 +735,14 @@ window.addEventListener('beforeunload', () => saveProgress());
     const f = localStorage.getItem('bf-font'); if (f) state.fontIdx = +f;
     $('#reader-body').style.fontSize = FONTS[state.fontIdx] + 'px';
     const d = localStorage.getItem('bf-dark');
-    if (d === '1') { state.readerDark = true; document.body.dataset.readerDark = '1'; $('#reader-theme').textContent = '☀️'; $('#reader-theme').classList.add('on'); }
+    if (d === '1') { state.readerDark = true; document.body.dataset.readerDark = '1'; $('#reader-theme').textContent = '🌙'; $('#reader-theme').classList.add('on'); }
     const t = localStorage.getItem('bf-theme');
     if (t) document.documentElement.dataset.theme = t;
     // URL 参数覆盖（?theme=dark / ?rdark=1）：预览与截图用
     const q = new URLSearchParams(location.search);
     if (q.get('theme') === 'dark') document.documentElement.dataset.theme = 'dark';
-    if (q.get('rdark') === '1') { document.body.dataset.readerDark = '1'; $('#reader-theme').textContent = '☀️'; $('#reader-theme').classList.add('on'); }
+    syncThemeBtn();  // 恢复/覆盖后同步 🌗 激活态与 title
+    if (q.get('rdark') === '1') { document.body.dataset.readerDark = '1'; $('#reader-theme').textContent = '🌙'; $('#reader-theme').classList.add('on'); }
   } catch {}
   loadSources();
   // 深链/刷新恢复：`#shelf` / `#reader/<rel>` 直达视图

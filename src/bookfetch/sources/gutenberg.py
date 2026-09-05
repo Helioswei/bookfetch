@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import html
 import re
+from urllib.parse import quote
 
 from ..model import Book, FetchResult
 from ..util import FetchError, fetch
@@ -97,7 +98,10 @@ class Gutenberg(Source):
     label = "古登堡公版"  # 与 wikisource-en「英文公版」区分（2026-09-05 双英文公版重名）
 
     def search(self, query: str) -> list[Book]:
-        page = fetch(SEARCH_URL.format(q=query.strip().replace(" ", "+")))
+        # 中文/非 ASCII query 必须 percent-encode，直拼 URL 会在 http.client putrequest
+        # 抛 UnicodeEncodeError（2026-09-05 少爷实测：搜「百年孤独」古登堡必炸）
+        q = quote(query.strip().replace(" ", "+"), safe="+")
+        page = fetch(SEARCH_URL.format(q=q))
         return _parse_search_page(page)
 
     def fetch(self, book: Book, *, on_progress=None, on_checkpoint=None, resume_from=0) -> FetchResult:

@@ -78,9 +78,13 @@ class Libgen(Source):
     def _first(self) -> str:
         alive = _mirrors()
         if not alive:
+            # 2026-09 实测：libgen 官方全面迁移新版站（登录 + API keys + object 模型），
+            # 老镜像域名（is/rs/st/lc 等）停放轮换、匿名 json.php/search.php 已停用——
+            # 是源接口架构迁移，不是临时网络故障；适配新版 API 见 PRD P2（含备选
+            # Anna's Archive 聚合）。探活保留：万一老镜像复活自动恢复，不手动判死。
             raise FetchError(
-                "libgen: 所有镜像当前不可达（停放/502/域名轮换），已探活并缓存 6h；"
-                "通常需代理访问，镜像恢复后自动可用"
+                "libgen：官方 2024 起迁移新版站（登录 + API keys），匿名搜索接口已停用，"
+                "此源待适配（PRD P2）；英文现代书暂缺此源，公版英文书可走古登堡/维基文库"
             )
         return alive[0]
 

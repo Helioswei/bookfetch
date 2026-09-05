@@ -24,6 +24,13 @@ runs:
       shell: bash
       run: uv run pytest tests/ -q
 
+    - name: Build translation assets (macOS, gitignored 产物 spec datas 需要)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        bash packaging/build_translator.sh
+        bash packaging/build_activator.sh
+
     - name: Build (macOS, via bookfetch.spec)
       if: runner.os == 'macOS'
       shell: bash
