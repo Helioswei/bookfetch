@@ -38,6 +38,7 @@ from .util.splitters import split_rendered
 from .util.translator import (
     split_reader_paras,
     trans_direction,
+    translate_available,
     translate_paragraphs,
 )
 
@@ -534,6 +535,7 @@ def open_book(rel: str, simp: bool = False) -> dict:
 
     simp=True 把目录标题转成与基准相反的语言（繁书→简 t2s / 简书→繁 s2t），
     正文由 chapter API 转。base 供前端决定切换按钮初始态。
+    translate = 平台翻译可用性（非 macOS False → 前端藏「译」钮，A3 收尾）。
     """
     p = _resolve(rel)
     ob = _open(p)
@@ -545,6 +547,7 @@ def open_book(rel: str, simp: bool = False) -> dict:
         "title": p.stem,
         "format": ob.format,
         "base": ob.base,
+        "translate": translate_available(),
         "chapters": [{"i": i, "title": t} for i, t in enumerate(titles)],
     }
 

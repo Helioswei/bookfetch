@@ -100,6 +100,16 @@ def _find_bridge() -> Path:
     raise ValueError("翻译桥不可用（需 macOS 26+ 且已构建 packaging/build/translate_bridge）")
 
 
+def translate_available() -> bool:
+    """N3 翻译是否可用（前端据此显隐阅读器「译」钮）。
+
+    仅 macOS 平台提供（系统翻译引擎，README 已标注 macOS 26.4+）。
+    平台内桥缺失/语言包未装**不在此判定**——保留点「译」后的引导路径
+    （缺桥友好报错 / 未装语言包拉准备器），藏了引导就无从发生。
+    """
+    return sys.platform == "darwin"
+
+
 def translate_paragraphs(
     texts: list[str], direction: str = DIR_EN2ZH, timeout: float = 600.0
 ) -> list[str | None]:

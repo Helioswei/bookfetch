@@ -222,6 +222,7 @@ bash scripts/release.sh v0.4.0     # 打 tag 并推送 → Release 附件出现 
 - [x] N2 壳（2026-09-04 完成：`bookfetch gui` pywebview 桌面窗口——指向内嵌 localhost HTTP，前端零改动；实测窗口渲染 + 8 源标签 + 键盘输入全通）
 - [x] UI「书卷宣纸」主题 + mac .app 打包（2026-09-04 完成：宣纸暖底/墨字/朱红/「藏」印三视图定稿实拍验收；书架行式+续读进度条；hash 深链 `#shelf` `#reader/书名`；`packaging/desktop_entry.py` + PyInstaller → `dist/bookfetch.app` 31MB 实测启动渲染 ✓）
 - [x] N3 翻译（2026-09-05 完成：中英双向沉浸式整章对照——macOS 系统翻译桥 swift + 逐段译文 UI；方向自动（英文书英译中/中文书中译英）；首次引导「翻译语言包准备器」一键下载+安装语言包约 1GB，全离线）
+- [x] v0.4.0：英文切章 + B4 下载体验三件套 + CLI/UI 边界（2026-09-05 完成：英文书 `CHAPTER/CHAP. + 数字/罗马` 独立标题行切章（含目录/逐章翻译）；UI 下载并发队列（上限 3、排队可取消）、单文件 Range 断点续传、biquge 逐章断点 + 下载中「读已下 N 章」边下边读——均为 serve/gui 任务系统专属，CLI get 同步直连不受影响；106 tests 绿，CI 双平台绿）
 
 ## 许可
 

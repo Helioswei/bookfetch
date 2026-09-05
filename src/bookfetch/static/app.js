@@ -446,16 +446,16 @@ function resetTrBtn() {
   const b = $('#reader-tr');
   b.textContent = '译';
   b.classList.remove('on', 'busy');
-  b.classList.remove('hidden');   // 双向后全书各章都提供翻译
+  // 非 macOS 平台（open_book.translate=false）藏「译」钮；macOS 内桥/语言包
+  // 引导走点「译」后的报错路径，不在此藏（藏了引导无从发生）
+  b.classList.toggle('hidden', !state.book || state.book.translate === false);
   b.disabled = false;
   b.title = '翻译本章（沉浸对照，方向自动）';
 }
 function updateTrBtn(dir) {
-  const b = $('#reader-tr');
-  b.classList.remove('hidden');
   resetTrBtn();
   const d = TR_DIR_HINT[dir] || '自动';
-  b.title = `翻译本章（${d}，沉浸对照）`;
+  $('#reader-tr').title = `翻译本章（${d}，沉浸对照）`;
 }
 async function translateChapter() {
   const ob = state.book, cur = state.cur;

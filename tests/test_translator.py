@@ -144,3 +144,13 @@ def test_find_activator_missing_raises(monkeypatch):
     monkeypatch.setattr(translator, "_activator_candidates", lambda: [])
     with pytest.raises(ValueError, match="准备器缺失"):
         translator.find_activator()
+
+
+def test_translate_available_platform_gate(monkeypatch):
+    """A3：翻译可用性 = 平台门（仅 macOS）。前端据此藏「译」钮。"""
+    monkeypatch.setattr(translator.sys, "platform", "darwin")
+    assert translator.translate_available() is True
+    monkeypatch.setattr(translator.sys, "platform", "win32")
+    assert translator.translate_available() is False
+    monkeypatch.setattr(translator.sys, "platform", "linux")
+    assert translator.translate_available() is False

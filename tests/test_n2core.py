@@ -1,5 +1,6 @@
 """Offline tests for the N2 core (shelf / reader / progress / download)."""
 
+import sys
 import time
 
 import pytest
@@ -66,6 +67,7 @@ def test_open_txt_chapters(env):
     ob = n2core.open_book(rel)
     assert ob["format"] == "txt"
     assert [c["title"] for c in ob["chapters"]] == ["序", "卷一", "卷二"]
+    assert ob["translate"] is (sys.platform == "darwin")  # A3：平台翻译可用性随书返回
     c1 = n2core.chapter(rel, 1)
     assert "正文第一段" in c1["text"]
 
