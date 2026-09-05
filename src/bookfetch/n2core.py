@@ -200,15 +200,14 @@ def _translate_book_title(query: str) -> tuple[str, str] | tuple[None, None]:
     return en, "mt"
 
 
-def search(query: str, sources: list[str] | None = None, limit: int = 30) -> dict:
+def search(query: str, sources: list[str] | None = None, limit: int = 200) -> dict:
     """Search across sources in parallel (GUI: a slow/dead source must not
-    stall the whole grid; CLI keeps its own serial search_all)."""
+    stall the whole grid; CLI keeps its own serial search_all).
+
+    limit 仅作总量防呆（默认 200 > 全源 adapter 一页上限之和）；不按源截断
+    ——adapter 抓回的一页全量都给前端，由 UI 滚动分批展示（少爷 2026-09-05
+    定案 3a：用户要找的书不被合并层截断）。"""
     names = sources or source_names()
-    # 全源模式（sources=None = 「全部」分类）每源配额：防单源刷屏
-    # （外文源机翻假阳性等）挤占其他源；分类模式不限额，保持现状。
-    per_source: int | None = None
-    if sources is None:
-        per_source = 10
     out: list[dict] = []
     errors: dict[str, str] = {}
 
@@ -228,12 +227,8 @@ def search(query: str, sources: list[str] | None = None, limit: int = 30) -> dic
             return
         try:
             q = translated["to"] if (translated and n in _FOREIGN_SOURCES) else query
-            mine: list[dict] = []
             for b in src.search(q):
-                mine.append(b.to_dict())
-                if per_source and len(mine) >= per_source:
-                    break
-            out.extend(mine)
+                out.append(b.to_dict())
         except Exception as e:  # noqa: BLE001 — per-source failures are reported, not fatal
             logger.warning("search source %s failed: %s", n, e, exc_info=True)
             errors[n] = friendly(e)

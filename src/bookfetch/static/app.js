@@ -84,6 +84,7 @@ const FONTS = [17, 19, 22, 25];
 
 /* ---------- 搜索 ---------- */
 let _searchCache = [];   // 最近一次搜索的完整结果（下载按钮按索引取）
+let _shown = 0;          // 滚动分批已渲染条数（全量索引窗口，3a 定案）
 
 // 分类 → 源组（2026-09-05 少爷定稿：UI 只让用户选"书的类别"，源是内部实现）。
 // 顺序 = chips 显示顺序；null = 全部源。libgen 为综合库，进每个具体分类。
@@ -149,7 +150,21 @@ async function doSearch(q) {
     box.innerHTML = '<p class="empty">没有结果，试试换个关键词或分类</p>';
     return;
   }
-  box.innerHTML = _searchCache.map(bookCard).join('');
+  box.innerHTML = '';
+  _shown = 0;
+  showMore(30);
+}
+
+// 滚动分批追加渲染（3a 定案：后端全量返回，前端分 30 条/批滚动展示）。
+// 保持 bookCard 全量索引——下载按钮 _searchCache[data-i] 依赖它。
+function showMore(n) {
+  const target = Math.min(_shown + n, _searchCache.length);
+  if (target > _shown) {
+    const more = _searchCache.slice(_shown, target)
+      .map((b, j) => bookCard(b, _shown + j)).join('');
+    $('#search-results').insertAdjacentHTML('beforeend', more);
+    _shown = target;
+  }
 }
 
 function bookCard(b, i) {
@@ -731,6 +746,14 @@ $('#search-form').addEventListener('submit', (e) => {
 $('#search-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
 
 window.addEventListener('beforeunload', () => saveProgress());
+
+// 触底加载更多：距页底 300px 内且还有未渲染结果 → 追加一批（3a）
+window.addEventListener('scroll', () => {
+  if (_shown < _searchCache.length &&
+      window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 300) {
+    showMore(30);
+  }
+}, { passive: true });
 
 /* ---------- boot ---------- */
 (async () => {
