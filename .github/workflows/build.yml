@@ -23,12 +23,10 @@ jobs:
           - label: macos-arm64
             os: macos-26          # Apple 芯片 (M1+)，macOS 26 镜像（翻译桥需 26 SDK）；Intel Mac 走 CLI/PyPI
             zip: bookfetch-macos-arm64.zip
-            pkg: dist/bookfetch.app   # 上传产物目录本体：artifact 下载解压一次即得 .app（传 zip 会被 GitHub 再包一层 = 双层压缩）
             art: bookfetch-macos-arm64
           - label: windows-x64
             os: windows-latest
             zip: bookfetch-windows-x64.zip
-            pkg: dist/bookfetch        # win onedir 目录
             art: bookfetch-windows-x64
     steps:
       - uses: actions/checkout@v4
@@ -37,9 +35,17 @@ jobs:
         with:
           zip-name: ${{ matrix.zip }}
 
+      # upload-artifact 传目录会剥掉顶层目录名（dist/bookfetch.app → 打散成 Contents/…），
+      # 先 stage 出「只含产物本体」的目录，再传 stage/* 保留 bookfetch.app / bookfetch 顶层名
+      - name: Stage artifact (macOS)
+        if: runner.os == 'macOS'
+        run: mkdir -p stage && ditto dist/bookfetch.app stage/bookfetch.app   # ditto 保留权限/xattr，解压后双击可执行
+      - name: Stage artifact (Windows)
+        if: runner.os == 'Windows'
+        run: New-Item -ItemType Directory -Path stage -Force; Copy-Item -Recurse dist/bookfetch stage/bookfetch
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.art }}
-          path: ${{ matrix.pkg }}
+          path: stage/*
           if-no-files-found: error
