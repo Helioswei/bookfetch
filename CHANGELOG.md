@@ -37,12 +37,6 @@ bookfetch 版本历史。版本号遵循 [SemVer](https://semver.org/lang/zh-CN/
 - **搜索源三修**：① wikisource 搜索改 `intitle:` 只匹配标题——MediaWiki 全文搜索把正文引用书名的司法文书当结果（搜「百年孤独」命中长宁区法院盗版案判决书）② gutenberg 中文 query percent-encode（原直拼 URL 抛 UnicodeEncodeError，中文搜索必炸）③ libgen 状态文案改真实原因（官方 2024 起迁移新版站登录+API keys，匿名接口停用；适配排 PRD P2）
 - 125 tests 绿（+3 导入对话框 hook 测试）
 
-## 下一步 / 候选（P2，未排期）
-
-- Windows 端翻译（N3 V2：在线翻译 provider，用户自选服务商自配 key）
-- Apple 开发者签名（$99/年，消除首次右键打开）
-- 手机 App
-
 ## v0.4.0（2026-09-05，桌面包已发布；未单独上 PyPI——内容并入 v1.0.0）
 
 英文切章 + 下载体验三件套 + CLI/UI 边界 + 实测收尾：
