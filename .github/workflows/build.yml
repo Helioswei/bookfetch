@@ -21,7 +21,7 @@ jobs:
       matrix:
         include:
           - label: macos-arm64
-            os: macos-14          # Apple 芯片 (M1+)；Intel Mac 走 CLI/PyPI
+            os: macos-26          # Apple 芯片 (M1+)，macOS 26 镜像（翻译桥需 26 SDK）；Intel Mac 走 CLI/PyPI
             zip: bookfetch-macos-arm64.zip
           - label: windows-x64
             os: windows-latest
