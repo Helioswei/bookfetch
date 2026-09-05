@@ -202,10 +202,10 @@ uv run pytest -q      # 离线测试，基于 tests/fixtures 真实抓包样本
 - **正式发版**（一条命令，触发构建并挂到 Release 页）：
 
 ```bash
-bash scripts/release.sh v0.4.0     # 打 tag 并推送 → Release 附件出现 mac/win zip
+bash scripts/release.sh v0.4.0     # 打 tag 并推送 → Release 附件出现 mac/win zip + PyPI 自动发布
 ```
 
-- PyPI 发布（CLI 形态）自理：`uv build && uv publish`（需 PyPI token）
+- **PyPI 自动发布**（tag v* 时由 `pypi` workflow 构建 sdist+wheel 并上传，走 Trusted Publisher OIDC 无 token）：需在 PyPI 项目设置一次性绑定 `Helioswei/bookfetch`（Publishing → Add trusted publisher，workflow name 填 `pypi`）。发布前先 bump `pyproject.toml` 版本号并提交（workflow 会校验 tag == pyproject 版本，不一致即拦）
 
 ## 路线图
 
@@ -224,8 +224,9 @@ bash scripts/release.sh v0.4.0     # 打 tag 并推送 → Release 附件出现 
 - [x] N3 翻译（2026-09-05 完成：中英双向沉浸式整章对照——macOS 系统翻译桥 swift + 逐段译文 UI；方向自动（英文书英译中/中文书中译英）；首次引导「翻译语言包准备器」一键下载+安装语言包约 1GB，全离线）
 - [x] v0.4.0：英文切章 + B4 下载体验三件套 + CLI/UI 边界（2026-09-05 完成：英文书 `CHAPTER/CHAP. + 数字/罗马` 独立标题行切章（含目录/逐章翻译）；UI 下载并发队列（上限 3、排队可取消）、单文件 Range 断点续传、biquge 逐章断点 + 下载中「读已下 N 章」边下边读——均为 serve/gui 任务系统专属，CLI get 同步直连不受影响；106 tests 绿，CI 双平台绿）
 - [x] v0.4.0 实测收尾（2026-09-05 a91ccf1，未发 tag）：下载中半成品上架书架——「未完成」红框条目直接读已下部分、下完自动换正式条目且阅读进度无缝继承（.part 与正式书共享进度）；任务面板收缩态改小圆钮（▸+完成计数）不再挡阅读翻章；111 tests 绿
-- [x] v0.4.0 实测收尾二（2026-09-05，未提交）：① 阅读器切章回顶——点「下一章」从新章开头读（原 bug：滚动位置残留上一章中途；修复弃 rAF 改 innerHTML 后同步定位——后台/不可见标签页 rAF 被浏览器节流不触发）；② 书架「未完成」条目加「继续下载」按钮——`.part.meta` 升级为 5 字段 `{source, id, title, fmt, index}`（index=最后成功章，续传从 index+1 抓）；meta 带 id 时 source+id 全等才续传（防同源同名不同转载版本误续）；旧版 meta（只有 source+index）按书名回源搜索找回，同名多版本不自动挑、中文引导手动选版本；续传完成自动清 .part 换正式条目、进度继承；117 tests 绿
-- [x] 书架管理三件套（2026-09-05，未提交）：① 书架删除书——行尾「删除」钮 + 原生 confirm 二次确认 → `delete_book` API（删文件 + 清进度条目 + 级联 .part/.meta）；② 导入本地书——书架右上「导入书籍」文件选择器（.txt/.epub 多选）→ base64 → `import_book` API 写书库上架（重名自动加序号 名(1).txt 不覆盖、文件名净化防目录穿越）；③ 「打开书库」按钮——系统文件管理器打开书库目录（Finder/explorer/xdg-open 平台分派）；空书架引导文案同步提示导入；122 tests 绿
+- [x] v0.4.0 实测收尾二（2026-09-05，212473f 已推送）：① 阅读器切章回顶——点「下一章」从新章开头读（原 bug：滚动位置残留上一章中途；修复弃 rAF 改 innerHTML 后同步定位——后台/不可见标签页 rAF 被浏览器节流不触发）；② 书架「未完成」条目加「继续下载」按钮——`.part.meta` 升级为 5 字段 `{source, id, title, fmt, index}`（index=最后成功章，续传从 index+1 抓）；meta 带 id 时 source+id 全等才续传（防同源同名不同转载版本误续）；旧版 meta（只有 source+index）按书名回源搜索找回，同名多版本不自动挑、中文引导手动选版本；续传完成自动清 .part 换正式条目、进度继承；117 tests 绿
+- [x] 书架管理三件套（2026-09-05，212473f 已推送）：① 书架删除书——行尾「删除」钮 + 原生 confirm 二次确认 → `delete_book` API（删文件 + 清进度条目 + 级联 .part/.meta）；② 导入本地书——书架右上「导入书籍」文件选择器（.txt/.epub 多选）→ base64 → `import_book` API 写书库上架（重名自动加序号 名(1).txt 不覆盖、文件名净化防目录穿越）；③ 「打开书库」按钮——系统文件管理器打开书库目录（Finder/explorer/xdg-open 平台分派）；空书架引导文案同步提示导入；122 tests 绿
+- [x] PyPI 发布自动化（2026-09-05 待绑定）：tag v* 由 `pypi` workflow 自动构建发布（Trusted Publisher OIDC，无 token）；版本校验 tag == pyproject
 
 ## 许可
 

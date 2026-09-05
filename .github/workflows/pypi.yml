@@ -1,0 +1,42 @@
+name: pypi
+
+# 打 tag v*（如 v0.4.0）→ 自动构建 sdist+wheel 并发布到 PyPI。
+# 认证走 Trusted Publisher（OIDC，无 token）——PyPI 项目设置绑定
+# 仓库 Helioswei/bookfetch + workflow 名 pypi 后即可（PyPI → bookfetch →
+# Publishing → Trusted Publishers → Add publisher，workflow name 填 pypi）。
+# 一条命令发版（桌面包 Release + PyPI 双发）：bash scripts/release.sh v0.4.0
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write # OIDC：gh-action-pypi-publish 用它向 PyPI 换临时上传凭证
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      - name: Version guard (tag == pyproject)
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VER="$(python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          if [ "$TAG" != "$VER" ]; then
+            echo "❌ tag v$TAG 与 pyproject.toml 版本 $VER 不一致——先 bump pyproject 再打 tag（防撞 PyPI 已存在版本）" >&2
+            exit 1
+          fi
+          echo "✓ tag v$TAG == pyproject $VER"
+
+      - name: Build sdist + wheel
+        run: uv build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
