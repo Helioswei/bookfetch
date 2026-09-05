@@ -100,5 +100,5 @@ bookfetch get ctext 727782 --out ./books --simplify     # 繁体转简体（需 
 用户要"边下边读/管理书库/阅读器"时提示可用桌面 App 或浏览器 UI：
 
 ```bash
-bookfetch serve    # 浏览器 UI（自动开浏览器），需 v0.4+（PyPI 1.0.0 发布后 pip 版可用）
+bookfetch serve    # 浏览器 UI（自动开浏览器），v1.0.0 起 PyPI 可装：pip install bookfetch
 ```
