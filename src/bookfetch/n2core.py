@@ -20,6 +20,7 @@ import logging
 import os
 import re
 import subprocess
+import sys
 import threading
 import zipfile
 from argparse import Namespace
@@ -249,6 +250,12 @@ def _run_job_inner(job: _Job) -> None:
     if fr is None:
         part, resume_from = _partial_state(book)
         meta_path = library_dir() / f"{_partial_fname(book)}.txt.part.meta"
+        if resume_from == 0 and part is not None and part.exists():
+            # 从头下载但 .part 有残留（meta 损坏/版本不匹配被清）：先清空重下，
+            # 否则 on_checkpoint 会把新内容 append 进旧半成品 → 混版/章节重复
+            part.unlink(missing_ok=True)
+            if meta_path is not None:
+                meta_path.unlink(missing_ok=True)
 
         def on_progress(done: int, total: int) -> bool:
             job.done, job.total = done, total
@@ -256,9 +263,24 @@ def _run_job_inner(job: _Job) -> None:
 
         def on_checkpoint(index: int, c: Chapter) -> None:
             # B4 边下边读：每成功一章 → 更新 meta（续传点）+ 增量追加库内 .part
+            # meta 存完整任务元信息（source/id/title/fmt）——书架「继续下载」靠它
+            # 还原 download() 参数（resume_partial）；旧版只有 source+index 也能续传，
+            # 但缺 id 无法从书架一键恢复（需按书名搜索找回，见 resume_partial）。
             if part is None:
                 return
-            meta_path.write_text(json.dumps({"source": job.source, "index": index}), encoding="utf-8")
+            meta_path.write_text(
+                json.dumps(
+                    {
+                        "source": job.source,
+                        "id": job.book_id,
+                        "title": job.title,
+                        "fmt": job.fmt,
+                        "index": index,
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
             head = f"=== {c.title} ===\n{c.text}"
             with part.open("a", encoding="utf-8") as fh:
                 if part.stat().st_size == 0:
@@ -320,13 +342,17 @@ def _partial_state(book: Book) -> tuple[Path, int]:
             m = json.loads(meta.read_text(encoding="utf-8"))
         except (ValueError, OSError):
             m = None
+        m_id = m.get("id") if isinstance(m, dict) else None
         if (
             isinstance(m, dict)
             and m.get("source") == book.source
             and isinstance(m.get("index"), int)
+            # meta 带 id 时精确绑定任务（防同源同名不同版本误续——biquge 转载版
+            # 同名多条目实测）；旧 meta 无 id 退化 source+书名 匹配（存量兼容）
+            and (m_id is None or m_id == book.id)
         ):
             return part, int(m["index"]) + 1
-        meta.unlink(missing_ok=True)  # 损坏/孤儿 meta：清掉，避免误续
+        meta.unlink(missing_ok=True)  # 损坏/孤儿/版本不匹配：清掉，避免误续
     return part, 0
 
 
@@ -374,6 +400,67 @@ def cancel(task_id: str) -> dict:
         return {"task_id": task_id, "ok": True, "message": "取消中…"}
     zh = {"done": "已完成", "error": "失败", "cancelled": "已取消"}.get(job.status, job.status)
     return {"task_id": task_id, "ok": False, "message": f"任务已{zh}"}
+
+
+def resume_partial(rel: str) -> dict:
+    """书架「继续下载」：把未完成半成品（.txt.part）重新投入下载队列，自动断点续传。
+
+    任务元信息存 .part.meta（source/id/title/fmt/index，B4c+扩展）；本函数把 meta
+    还原成 download() 参数——download 内部 _partial_state 命中 meta 即从
+    index+1 续传，完成时 .part/meta 清理、正式书条目接管进度（a91ccf1）。
+    应用重启后任务列表（_TASKS 内存态）已清，这是半成品的唯一恢复入口。
+
+    旧版 meta 只有 {"source","index"}（缺 id）→ 自动按书名在该源内搜索，找回
+    唯一同名条目续传（防误配：书名必须完全一致）；找不到 → ValueError 中文引导。
+    """
+    p = _resolve(rel)
+    if not p.is_file() or not p.name.endswith(_PART_SUFFIX):
+        raise ValueError("不是未完成下载条目（.part）")
+    meta_path = library_dir() / f"{p.name}.meta"
+    book_title = p.name[: -len(_PART_SUFFIX)]  # 书名 = 文件名去 .txt.part（与正式书同源命名）
+    src = None
+    b_id = None
+    fmt = None
+    if meta_path.exists():
+        try:
+            m = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            m = None
+        if isinstance(m, dict) and isinstance(m.get("source"), str):
+            src = m["source"]
+            b_id = m.get("id")
+            if not isinstance(b_id, str) or not b_id:
+                b_id = None
+            fmt = m.get("fmt")
+            if not isinstance(fmt, str) or not fmt:
+                fmt = None
+    if not src:
+        raise ValueError(
+            f"「{book_title}」的半成品缺少断点信息——请到搜索页搜索该书重新下载，"
+            "已下章节会被续写复用"
+        )
+    if b_id is None:
+        # 旧版 meta 无 id：按书名在该源内搜索找回（书名必须完全一致才续，防误配错书；
+        # 同名多命中 = 可能不同转载版本，绝不自动挑——引导手动选）
+        try:
+            r = search(book_title, [src])
+        except Exception as e:  # noqa: BLE001 — 网络失败等一律转中文引导
+            raise ValueError(f"自动找回源条目失败：{friendly(e)}") from None
+        hits = [b for b in r.get("results", []) if b.get("title") == book_title]
+        if not hits:
+            raise ValueError(
+                f"在源「{src}」找不到与「{book_title}」完全同名的条目——"
+                "请到搜索页搜索该书手动下载"
+            )
+        if len(hits) > 1:
+            raise ValueError(
+                f"「{book_title}」在源「{src}」有 {len(hits)} 个同名条目（可能是不同"
+                "版本/转载）——请到搜索页手动选择与半成品一致的那本下载；"
+                "选对版本后会自动从断点继续，已下章节不重抓"
+            )
+        b_id = hits[0]["id"]
+    job = download(src, b_id, title=book_title, fmt=fmt or "txt")
+    return {"task_id": job["task_id"], "title": book_title, "fmt": fmt or "txt"}
 
 
 # ------------------------------------------------------------------ shelf ---
@@ -435,6 +522,88 @@ def shelf() -> dict:
                 }
             )
     return {"library": str(root), "books": books}
+
+
+# ------------------------------------------------------- shelf 管理（删/导/开）---
+
+def delete_book(rel: str) -> dict:
+    """书架删除书：删库内文件 + 清阅读进度 + 级联 .txt.part/.meta（无回收站，前端须二次确认）。
+
+    半成品条目（书名.txt.part）删除后，其进度条目（归一的正式书名 key，B4c）一并清。
+    """
+    p = _resolve(rel)
+    if not p.is_file():
+        raise ValueError(f"「{rel}」在书库中不存在")
+    is_partial = p.name.endswith(_PART_SUFFIX)
+    if not (is_partial or p.suffix.lower() in _TXT_EXT + _EPUB_EXT):
+        raise ValueError("只支持删除 .txt/.epub 书籍或 .txt.part 半成品")
+    gone = [p.name]
+    p.unlink()
+    if is_partial:
+        m = p.parent / f"{p.name}.meta"
+        if m.exists():
+            m.unlink()
+            gone.append(m.name)
+    else:
+        # 正式书伴生残留的半成品（同名正式书在时 shelf 不列，但文件可能还在）
+        for suffix in (_PART_SUFFIX, _PART_SUFFIX + ".meta"):
+            c = p.parent / f"{p.stem}{suffix}"
+            if c.exists():
+                c.unlink()
+                gone.append(c.name)
+    key = _progress_key(library_rel(p))
+    with _LOCK:
+        d = _load_progress()
+        if key in d:
+            del d[key]
+            _PROGRESS.parent.mkdir(parents=True, exist_ok=True)
+            _PROGRESS.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+    return {"ok": True, "deleted": gone}
+
+
+def import_book(name: str, data_b64: str) -> dict:
+    """导入用户本地书（txt/epub）：base64 → 写书库上架。
+
+    重名不覆盖——自动加序号（名.txt → 名(1).txt）后返回实际 rel。
+    """
+    import base64
+
+    name = Path(name or "").name  # 只取文件名（去路径防目录穿越）
+    if not name.lower().endswith((".txt", ".epub")):
+        raise ValueError("只支持导入 .txt / .epub 文件")
+    try:
+        raw = base64.b64decode(data_b64, validate=True)
+    except Exception:
+        raise ValueError("导入数据损坏（base64 解码失败）——请重试") from None
+    if not raw:
+        raise ValueError("文件为空——请选择有效的书籍文件")
+    root = library_dir()
+    root.mkdir(parents=True, exist_ok=True)
+    stem, ext = os.path.splitext(name)
+    cand = root / name
+    n = 1
+    while cand.exists():
+        cand = root / f"{stem}({n}){ext}"
+        n += 1
+    cand.write_bytes(raw)
+    return {"ok": True, "rel": library_rel(cand), "title": cand.stem}
+
+
+def open_library() -> dict:
+    """在系统文件管理器打开书库目录（Finder / 资源管理器 / xdg-open）。"""
+    root = library_dir()
+    if not root.exists():
+        raise ValueError(f"书库目录不存在：{root}")
+    try:
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", str(root)])
+        elif sys.platform.startswith("win"):
+            subprocess.Popen(["explorer", str(root)])
+        else:
+            subprocess.Popen(["xdg-open", str(root)])
+    except OSError as e:
+        raise ValueError(f"无法打开书库目录：{e}") from None
+    return {"ok": True}
 
 
 # ------------------------------------------------------------------ read ---
@@ -705,6 +874,14 @@ def api_call(name: str, params: dict) -> dict:
         return task_status(params.get("task_id", ""))
     if name == "cancel":
         return cancel(params.get("task_id", ""))
+    if name == "resume_partial":
+        return resume_partial(params.get("rel", ""))
+    if name == "delete_book":
+        return delete_book(params.get("rel", ""))
+    if name == "import_book":
+        return import_book(params.get("name", ""), params.get("data", ""))
+    if name == "open_library":
+        return open_library()
     if name == "shelf":
         return shelf()
     if name == "open_book":
@@ -731,7 +908,8 @@ def api_call(name: str, params: dict) -> dict:
 
 
 BUILTIN_API = {
-    "search", "download", "cancel", "task_status", "shelf", "open_book",
+    "search", "download", "cancel", "resume_partial", "delete_book", "import_book",
+    "open_library", "task_status", "shelf", "open_book",
     "chapter", "translate", "open_activator", "progress_get", "progress_set",
     "library", "sources", "settings_get", "settings_set",
 }

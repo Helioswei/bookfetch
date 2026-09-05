@@ -81,6 +81,8 @@ uv run pyinstaller --noconfirm --clean --windowed --name bookfetch \
 | github | 中文古籍文本仓库 | `owner/repo:路径/书名.txt` | ✅ |
 | wikisource | 中文公版书（古籍+现代公版） | 页面标题（精确，注意异体字如「吶喊」） | 需代理 |
 | wikisource-en | 英文公版书 | 页面标题 | 需代理 |
+| gutenberg | 英文公版（官方 txt/epub） | 数字 ebook id | ✅ |
+| biquge | 中文网文/小说（繁体，版权期内自审） | 数字 book_id | ✅ |
 | libgen | 英文现代书（原文件） | md5 | 需代理；镜像轮换，全灭时明确报错 |
 
 注意：Wikisource 中文标题有异体字坑——search 返回什么标题就用什么标题 get

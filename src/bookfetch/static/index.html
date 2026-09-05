@@ -57,9 +57,13 @@
     <div class="shelf-head">
       <h2>我的书架</h2>
       <span id="shelf-lib" class="muted"></span>
+      <span class="spacer"></span>
+      <button id="shelf-open-lib" title="在文件管理器中打开书库目录——手动放入 .txt/.epub 即上架">打开书库</button>
+      <button id="shelf-import" title="选择电脑里的 .txt/.epub 文件，复制进书库上架">导入书籍</button>
+      <input type="file" id="shelf-import-input" accept=".txt,.epub" multiple hidden>
     </div>
     <div id="shelf-empty" class="empty hidden">
-      <p>书架还空着——去 <a href="#" id="empty-go-search">搜索</a> 下载第一本书吧</p>
+      <p>书架还空着——去 <a href="#" id="empty-go-search">搜索</a> 下载第一本书，或点右上角「导入书籍」把本地的 txt/epub 放进书架</p>
     </div>
     <div id="shelf-books" class="cards"></div>
   </section>

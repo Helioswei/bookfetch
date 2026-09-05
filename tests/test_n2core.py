@@ -1,12 +1,15 @@
 """Offline tests for the N2 core (shelf / reader / progress / download)."""
 
+import json
 import sys
 import time
+from pathlib import Path
 
 import pytest
 
 from bookfetch import n2core, fetch_cache
 from bookfetch.model import Book, Chapter, FetchResult
+from bookfetch.util import CancelledError
 from bookfetch.util.epub import build_epub
 from bookfetch.util.translator import split_reader_paras
 
@@ -191,6 +194,43 @@ def _wait_task(task_id: str, timeout: float = 10.0) -> dict:
     raise AssertionError("task did not finish")
 
 
+class _ChapSrc:
+    """10 章全速逐章源：记录 resume_from（B4c 续传断言用）。"""
+
+    name = "chapsrc"
+    total = 10
+
+    def __init__(self):
+        self.resume_seen = []
+
+    def fetch(self, book, *, on_progress=None, on_checkpoint=None, resume_from=0):
+        self.resume_seen.append(resume_from)
+        chs = []
+        for i in range(resume_from, self.total):
+            if on_progress and not on_progress(i, self.total):
+                raise CancelledError()
+            c = Chapter(title=f"第{i}章", text=f"正文{i}")
+            chs.append(c)
+            if on_checkpoint:
+                on_checkpoint(i, c)
+        return FetchResult(
+            source=self.name, id=book.id, title=book.title, chars=0, lines=0,
+            format="txt", content="", chapters=chs,
+        )
+
+
+def _seed_partial(env, name: str, n: int, meta: dict) -> Path:
+    """预置书库半成品（.part + .meta），模拟重启后的残留状态（checkpoint 同款格式）。"""
+    lib = env / "Books"
+    lib.mkdir(parents=True, exist_ok=True)
+    blocks = [f"=== 第{i}章 ===\n正文{i}" for i in range(n)]
+    (lib / f"{name}.txt.part").write_text("\n\n".join(blocks) + "\n", encoding="utf-8")
+    (lib / f"{name}.txt.part.meta").write_text(
+        json.dumps(meta, ensure_ascii=False), encoding="utf-8"
+    )
+    return lib / f"{name}.txt.part"
+
+
 def test_download_cancel_sets_cancelled_status(env, monkeypatch):
     """cancel() → the cooperative hook aborts the fetch with CancelledError."""
     from bookfetch.util import CancelledError
@@ -308,6 +348,9 @@ def test_b4_partial_survives_cancel_and_resumes(env, monkeypatch):
     part = env / "Books" / "长夜书.txt.part"
     meta = env / "Books" / "长夜书.txt.part.meta"
     assert part.exists() and meta.exists()
+    # meta 存完整任务元信息（书架「继续下载」resume_partial 靠它还原 download 参数）
+    m = json.loads(meta.read_text(encoding="utf-8"))
+    assert m == {"source": "chsrc", "id": "7", "title": "长夜书", "fmt": "txt", "index": 4}
     st = n2core.task_status(r1["task_id"])
     assert st["partial_rel"] == "长夜书.txt.part"
     # .part 打开即可读（split_rendered 还原 5 章）
@@ -325,6 +368,100 @@ def test_b4_partial_survives_cancel_and_resumes(env, monkeypatch):
     assert "长夜书.txt" in shelf_books
     ob = n2core._open(env / "Books" / "长夜书.txt")
     assert [c.title for c in ob.chapters] == [f"第{i}章" for i in range(10)]
+
+
+def test_resume_partial_fast_path_from_bookcase(env, monkeypatch):
+    """书架「继续下载」快路径（2026-09-05）：meta 含完整任务信息 → 直接续传。
+
+    模拟应用重启后的书库残留（_TASKS 内存态已清，.part/.meta 在位）——
+    resume_partial 是半成品的唯一恢复入口。
+    """
+    s = _ChapSrc()
+    monkeypatch.setattr("bookfetch.n2core.get_source", lambda name: s)
+    _seed_partial(
+        env, "长夜书", 5,
+        {"source": "chapsrc", "id": "7", "title": "长夜书", "fmt": "txt", "index": 4},
+    )
+    r = n2core.resume_partial("长夜书.txt.part")
+    assert r["title"] == "长夜书" and r["fmt"] == "txt" and r["task_id"]
+    st = _wait_task(r["task_id"])
+    assert st["status"] == "done", st
+    assert s.resume_seen == [5]  # 从最后成功章 index+1 续传，已下 5 章不重抓
+    assert not (env / "Books" / "长夜书.txt.part").exists()  # 完成：半成品清理
+    ob = n2core._open(env / "Books" / "长夜书.txt")
+    assert [c.title for c in ob.chapters] == [f"第{i}章" for i in range(10)]
+
+
+def test_resume_partial_old_meta_recovers_id_by_search(env, monkeypatch):
+    """旧版 meta（只有 source+index，无 id）→ 按书名在该源内搜索找回同名条目续传。"""
+    s = _ChapSrc()
+    monkeypatch.setattr("bookfetch.n2core.get_source", lambda name: s)
+    seen = {}
+
+    def _fake_search(query, sources=None, limit=30):
+        seen["q"], seen["s"] = query, sources
+        return {"results": [{"source": "chapsrc", "id": "7", "title": "长夜书"}]}
+
+    monkeypatch.setattr("bookfetch.n2core.search", _fake_search)
+    _seed_partial(env, "长夜书", 4, {"source": "chapsrc", "index": 3})
+    r = n2core.resume_partial("长夜书.txt.part")
+    assert seen == {"q": "长夜书", "s": ["chapsrc"]}
+    st = _wait_task(r["task_id"])
+    assert st["status"] == "done", st
+    assert s.resume_seen == [4]  # meta.index=3 → resume_from=4
+    ob = n2core._open(env / "Books" / "长夜书.txt")
+    assert len(ob.chapters) == 10  # 旧 4 章 + 新 6 章，无重复无遗漏
+
+
+def test_resume_partial_old_meta_no_match_raises(env, monkeypatch):
+    """搜索找不回同名条目 → 中文报错引导（绝不静默续到别的书）。"""
+    monkeypatch.setattr(
+        "bookfetch.n2core.search", lambda q, sources=None, limit=30: {"results": []}
+    )
+    _seed_partial(env, "长夜书", 3, {"source": "chapsrc", "index": 2})
+    with pytest.raises(ValueError, match="找不到"):
+        n2core.resume_partial("长夜书.txt.part")
+
+
+def test_resume_partial_old_meta_multiple_hits_raises(env, monkeypatch):
+    """同名多命中（转载版，biquge 將夜/詭秘之主 实测各 3-5 条）→ 不自动挑，引导手动选。"""
+    monkeypatch.setattr(
+        "bookfetch.n2core.search",
+        lambda q, sources=None, limit=30: {
+            "results": [
+                {"source": "chapsrc", "id": "7", "title": "长夜书"},
+                {"source": "chapsrc", "id": "8", "title": "长夜书"},
+                {"source": "chapsrc", "id": "9", "title": "另一个名字"},
+            ]
+        },
+    )
+    _seed_partial(env, "长夜书", 3, {"source": "chapsrc", "index": 2})
+    with pytest.raises(ValueError, match="同名条目"):
+        n2core.resume_partial("长夜书.txt.part")
+
+
+def test_partial_meta_id_mismatch_restarts_clean(env, monkeypatch):
+    """meta 带 id 时精确绑定任务：同书名不同 id（另一个转载版）→ 不误续旧 .part，
+    清空残留从头下（防混版/章节重复）。"""
+    s = _ChapSrc()
+    monkeypatch.setattr("bookfetch.n2core.get_source", lambda name: s)
+    _seed_partial(
+        env, "长夜书", 5,
+        {"source": "chapsrc", "id": "7", "title": "长夜书", "fmt": "txt", "index": 4},
+    )
+    r = n2core.download("chapsrc", "8", title="长夜书", fmt="txt")
+    st = _wait_task(r["task_id"])
+    assert st["status"] == "done", st
+    assert s.resume_seen == [0]  # id 不匹配 → 不续传，从头
+    ob = n2core._open(env / "Books" / "长夜书.txt")
+    assert [c.title for c in ob.chapters] == [f"第{i}章" for i in range(10)]  # 无混版无重复
+    assert not (env / "Books" / "长夜书.txt.part").exists()
+
+
+def test_resume_partial_rejects_non_partial_rel(env):
+    _write_book(env, "甲书", [Chapter("卷一", "内容一")])
+    with pytest.raises(ValueError, match="未完成"):
+        n2core.resume_partial("甲书.txt")
 
 
 def test_download_writes_into_library(env, monkeypatch):
@@ -528,3 +665,61 @@ def test_open_partial_book_clean_title(env):
     ob = n2core.open_book(rel)
     assert ob["title"] == "半本"
     assert len(ob["chapters"]) == 3
+
+
+# ------------------------------------------------- 书架管理（删/导/开）---
+
+def _b64(s: bytes) -> str:
+    import base64
+    return base64.b64encode(s).decode("ascii")
+
+
+def test_delete_book_removes_file_and_progress(env):
+    rel = _write_book(env, "甲书", [Chapter("卷一", "内容一"), Chapter("卷二", "内容二")])
+    n2core.progress_set(rel, 1, 500)
+    r = n2core.delete_book(rel)
+    assert r["ok"] and "甲书.txt" in r["deleted"]
+    assert not (env / "Books" / "甲书.txt").exists()
+    assert n2core.progress_get(rel)["progress"] == {}
+
+
+def test_delete_book_partial_cascades_meta_and_norm_progress(env):
+    _seed_partial(env, "长夜书", 3, {"source": "chsrc", "id": "7", "title": "长夜书", "fmt": "txt", "index": 2})
+    # 半成品阅读进度记在归一的正式书名 key（B4c）——删除必须一并清
+    n2core.progress_set("长夜书.txt.part", 2, 100)
+    r = n2core.delete_book("长夜书.txt.part")
+    assert r["ok"] and "长夜书.txt.part" in r["deleted"] and "长夜书.txt.part.meta" in r["deleted"]
+    assert not (env / "Books" / "长夜书.txt.part").exists()
+    assert not (env / "Books" / "长夜书.txt.part.meta").exists()
+    assert n2core.progress_get("长夜书.txt.part")["progress"] == {}
+
+
+def test_delete_book_rejects_escape_and_garbage(env):
+    with pytest.raises(ValueError):
+        n2core.delete_book("../../etc/passwd")
+    (env / "Books").mkdir(parents=True, exist_ok=True)
+    (env / "Books" / "readme.md").write_text("x", encoding="utf-8")
+    with pytest.raises(ValueError):
+        n2core.delete_book("readme.md")
+
+
+def test_import_book_roundtrip_dedup_and_sanitize(env):
+    n2core.import_book("新书.txt", _b64("第一章\n\n正文".encode("utf-8")))
+    assert (env / "Books" / "新书.txt").exists()
+    # 同名不覆盖 → 自动序号
+    r = n2core.import_book("新书.txt", _b64(b"dup"))
+    assert r["rel"] == "新书(1).txt"
+    # 文件名净化：去路径只取 basename（防目录穿越）
+    r = n2core.import_book("../怪谈.txt", _b64(b"x"))
+    assert r["rel"] == "怪谈.txt"
+    assert not (env / "Books" / ".." / "怪谈.txt").exists()
+    # 非 txt/epub 拒绝
+    with pytest.raises(ValueError, match="只支持"):
+        n2core.import_book("evil.pdf", _b64(b"x"))
+
+
+def test_open_library_opens_finder_on_macos(env, monkeypatch):
+    calls = []
+    monkeypatch.setattr(n2core.subprocess, "Popen", lambda cmd, **kw: calls.append(cmd))
+    r = n2core.open_library()
+    assert r["ok"] and calls == [["open", str(env / "Books")]]

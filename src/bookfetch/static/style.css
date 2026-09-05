@@ -202,11 +202,20 @@ a { color: var(--seal); }
 .card .actions button.epub:hover { background: var(--seal-deep); border-color: var(--seal-deep); color: #f6f1e7; }
 
 /* ---------- 书架 ---------- */
-.shelf-head { display: flex; align-items: baseline; gap: 1rem; margin: 1.5rem 0 .6rem; }
+.shelf-head { display: flex; align-items: center; gap: .9rem; margin: 1.5rem 0 .6rem; flex-wrap: wrap; }
 .shelf-head h2 {
   margin: 0; font-size: 1.12rem; font-family: var(--serif); color: var(--ink);
   border-left: 3px solid var(--seal); padding-left: .6rem; line-height: 1.2;
 }
+.shelf-head .muted { font-size: .78rem; }
+.shelf-head .spacer { flex: 1; }
+.shelf-head button {
+  margin: 0; padding: .24rem .72rem; font-size: .78rem; border-radius: 6px;
+  border: 1px solid var(--line); color: var(--ink-2); background: transparent;
+  cursor: pointer; transition: border-color .1s, color .1s;
+}
+.shelf-head button:hover { border-color: var(--seal); color: var(--seal); }
+.book-row .mini.del { margin-left: .15rem; }  /* 与进度条留隙（bar flex:1 已撑开，此行为视觉微调） */
 #shelf-books { display: flex; flex-direction: column; }
 .book-row {
   display: flex; align-items: center; gap: .9rem;
@@ -221,7 +230,7 @@ a { color: var(--seal); }
 .book-row .fmt { font-size: .74rem; color: var(--ink-3); flex: none; }
 .book-row .fmt em.warn {
   font-style: normal; color: var(--seal); border: 1px solid rgba(166, 59, 46, .35);
-  border-radius: 4px; padding: 0 .35rem; font-size: .66rem;
+  border-radius: 4px; padding: .15rem .35rem; font-size: .7rem; line-height: 1;
 }
 .book-row.partial .t { color: var(--ink-2); }  /* 未完成半成品：书名稍弱，未完成徽标已示意 */
 .book-row .prog {
@@ -230,6 +239,12 @@ a { color: var(--seal); }
 }
 .book-row .prog i { display: block; height: 100%; background: var(--seal); border-radius: 2px; }
 .book-row .pos { font-size: .76rem; color: var(--ink-3); flex: none; min-width: 76px; text-align: right; }
+.book-row .mini {
+  font-size: .7rem; padding: .15rem .5rem; border: 1px solid var(--line);
+  border-radius: 4px; color: var(--ink-2); background: transparent; cursor: pointer;
+  flex: none; white-space: nowrap; line-height: 1; transition: border-color .1s, color .1s;
+}
+.book-row .mini:hover { border-color: var(--seal); color: var(--seal); }
 .empty { text-align: center; color: var(--ink-3); padding: 3.4rem 0 1rem; }
 .empty a { color: var(--seal); }
 

@@ -259,6 +259,36 @@ function addTask(b, fmt) {
     });
 }
 
+/* 书架「继续下载」：半成品（.txt.part）→ resume_partial → 断点续传任务。
+   重启后任务列表已清（内存态），书架是半成品的恢复入口（a91ccf1 + 2026-09-05）。 */
+async function resumeShelfTask(row) {
+  const rel = row.dataset.rel;
+  const box = $('#tasks');
+  box.classList.remove('hidden', 'collapsed');   // 面板自动展开
+  $('#tasks-toggle').textContent = '▾';
+  const t = document.createElement('div');
+  t.className = 'task';
+  const name = rel.slice(0, -'.part'.length).replace(/\.txt$/, '');
+  t.innerHTML = `
+    <div class="t-row"><span class="t-title" title="${esc(name)}">${esc(name)}</span>
+      <span class="t-fmt">txt</span></div>
+    <div class="t-msg">恢复下载中…</div>
+    <div class="t-bar"><i style="width:0%"></i></div>
+    <div class="t-ops"></div>`;
+  $('#tasks-list').appendChild(t);
+  let r;
+  try { r = await BF.api('resume_partial', { rel }); }
+  catch (e) {
+    t.classList.add('err');
+    t.querySelector('.t-msg').textContent = '无法继续下载：' + (e.message || '');
+    const bar = t.querySelector('.t-bar'); if (bar) bar.remove();
+    return;
+  }
+  t.querySelector('.t-title').textContent = r.title || name;
+  const tf = t.querySelector('.t-fmt'); if (r.fmt) tf.textContent = r.fmt;
+  pollTask(r.task_id, t, { onRetry: () => resumeShelfTask(row) });
+}
+
 const taskOps = (el, html) => {
   const ops = el.querySelector('.t-ops');
   ops.innerHTML = html;
@@ -289,7 +319,12 @@ function pollTask(taskId, el, spec) {
       msg.textContent = r.message || '下载失败';
       if (bar) bar.remove();
       taskOps(el, `<button class="mini retry">重试</button><button class="mini x" title="移除">✕</button>`)
-        .querySelector('.retry').onclick = () => { el.remove(); addTask(spec.b, spec.fmt); };
+        .querySelector('.retry').onclick = () => {
+          el.remove();
+          // resume 任务：重试 = 再次从断点续传（不是全量重下）；默认 = 原任务重下
+          if (spec.onRetry) { spec.onRetry(); return; }
+          addTask(spec.b, spec.fmt);
+        };
       el.querySelector('.x').onclick = () => el.remove();
       return;
     }
@@ -372,18 +407,68 @@ async function loadShelf() {
       pos = `<span class="pos">第 ${ch} 章${pp != null ? ' · ' + pp + '%' : ''}</span>`;
     }
     return `
-    <div class="book-row${b.partial ? ' partial' : ''}" data-rel="${esc(b.rel)}" title="${b.partial ? '未完成下载 · 点击阅读已下部分（下载完成后自动变正式书，进度保留）' : esc(b.title)}">
+    <div class="book-row${b.partial ? ' partial' : ''}" data-rel="${esc(b.rel)}" title="${b.partial ? '未完成下载 · 点击阅读已下部分；「继续下载」断点续传不重抓（下载完成后自动变正式书，进度保留）' : esc(b.title)}">
       <span class="t">${esc(b.title)}</span>
       <span class="fmt">${b.partial ? '<em class="warn">未完成</em>' : `${esc(b.format)} · ${b.size_kb} KB`}</span>
-      ${bar}${pos}
+      ${b.partial ? '<button class="mini resume" data-act="resume" title="继续下载——从断点续传，已下部分不会重抓">继续下载</button>' : ''}
+      ${bar}<button class="mini del" data-act="del" title="删除这本书（文件与阅读进度一并删除，不可恢复）">删除</button>${pos}
     </div>`;
   }).join('');
 }
 $('#shelf-books').addEventListener('click', (e) => {
+  const resume = e.target.closest('button[data-act="resume"]');
+  if (resume) { e.stopPropagation(); resumeShelfTask(resume.closest('.book-row')); return; }
+  const del = e.target.closest('button[data-act="del"]');
+  if (del) { e.stopPropagation(); delShelfBook(del.closest('.book-row')); return; }
   const row = e.target.closest('.book-row');
   if (row) openReader(row.dataset.rel);
 });
 $('#empty-go-search').addEventListener('click', (e) => { e.preventDefault(); showView('search'); });
+$('#shelf-open-lib').addEventListener('click', async () => {
+  try { await BF.api('open_library', {}); }
+  catch (e) { alert('无法打开书库目录：' + (e.message || e)); }
+});
+$('#shelf-import').addEventListener('click', () => $('#shelf-import-input').click());
+$('#shelf-import-input').addEventListener('change', (e) => {
+  const files = [...(e.target.files || [])];
+  if (files.length) importBooks(files);
+  e.target.value = '';   // 允许重复选同一文件
+});
+
+/* 删除书架条目（文件 + 进度，不可恢复——原生 confirm 二次确认） */
+async function delShelfBook(row) {
+  const rel = row.dataset.rel;
+  const title = row.querySelector('.t').textContent;
+  if (!confirm(`删除「${title}」？\n将同时删除书籍文件与阅读进度，不可恢复。`)) return;
+  try {
+    await BF.api('delete_book', { rel });
+    loadShelf();
+  } catch (e) { alert('删除失败：' + (e.message || e)); }
+}
+
+/* 导入本地书：FileReader → base64 → import_book；多文件逐个，失败不中断 */
+function blobToBase64(f) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result).split(',')[1] || '');
+    r.onerror = () => rej(new Error('文件读取失败'));
+    r.readAsDataURL(f);
+  });
+}
+async function importBooks(files) {
+  const ok = [], bad = [];
+  for (const f of files) {
+    try {
+      const r = await BF.api('import_book', { name: f.name, data: await blobToBase64(f) });
+      ok.push(r.title);
+    } catch (e) { bad.push(`${f.name}（${e.message || e}）`); }
+  }
+  loadShelf();
+  if (ok.length || bad.length) {
+    alert([ok.length ? `已导入 ${ok.length} 本：${ok.join('、')}` : '',
+           bad.length ? `导入失败 ${bad.length} 本：${bad.join('；')}` : ''].filter(Boolean).join('\n'));
+  }
+}
 
 /* ---------- 阅读器 ---------- */
 function renderToc(chapters) {
@@ -394,7 +479,7 @@ async function openReader(rel) {
   let ob;
   try { ob = await BF.api('open_book', { rel }); }
   catch (e) { alert('打开失败：' + e.message); return; }
-  state.book = ob; state.cur = 0; state.simp = false; state.base = ob.base;
+  state.book = ob; state.cur = 0; state.pct = 0; state.simp = false; state.base = ob.base;
   updateSimpBtn();
   $('#reader-title').textContent = ob.title;
   renderToc(ob.chapters);
@@ -429,12 +514,12 @@ async function loadChapter() {
     li.classList.toggle('cur', +li.dataset.i === state.cur));
   $('#reader-pos').textContent = `第 ${state.cur + 1} / ${ob.chapters.length} 章`;
   const el = $('#reader-body');
-  requestAnimationFrame(() => {
-    if (state.pct > 0 && el.scrollHeight > el.clientHeight) {
-      el.scrollTop = state.pct * (el.scrollHeight - el.clientHeight);
-    }
-    state.pct = 0;
-  });
+  // 定位：仅 openReader 续读恢复（pct>0）时按比例滚动；其余（切章/简繁切换）一律回顶。
+  // 不用 rAF —— 后台/不可见标签页 rAF 被浏览器节流不触发（headless 实测），
+  // 依赖它切章回顶会静默失效；innerHTML 后同步读 scrollHeight 强制布局即可得正确值。
+  const max = el.scrollHeight - el.clientHeight;
+  el.scrollTop = state.pct > 0 && max > 0 ? state.pct * max : 0;
+  state.pct = 0;
   saveProgressSoon();
 }
 
@@ -532,6 +617,7 @@ function goChapter(i) {
   if (i < 0 || i >= state.book.chapters.length) return;
   saveProgress();
   state.cur = i;
+  state.pct = 0;   // 切章不继承旧章内滚动比例——新章必须从开头读
   loadChapter();
 }
 
