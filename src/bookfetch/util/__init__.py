@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+_log = logging.getLogger("bookfetch")
 
 UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -53,8 +57,62 @@ def _opener() -> urllib.request.OpenerDirector:
                 urllib.request.ProxyHandler({})
             )
         else:
-            _OPENER = urllib.request.build_opener()  # env + macOS system proxy
+            # "system": env 优先，其次 macOS 系统代理。
+            # PyInstaller 打包后 _scproxy（静态内建扩展）缺失 → urllib 读不到
+            # 系统代理 → GUI 双击（无 shell env）直连。macOS 用 scutil 兜底。
+            proxies = urllib.request.getproxies()
+            src = "env/_scproxy"
+            if not (proxies.get("http") or proxies.get("https")):
+                sys_proxy = _macos_system_proxy()
+                if sys_proxy:
+                    proxies = sys_proxy
+                    src = "scutil"
+            _log.info("proxy mode=system resolved via %s: %s", src, proxies or "直连")
+            if proxies:
+                _OPENER = urllib.request.build_opener(
+                    urllib.request.ProxyHandler(proxies)
+                )
+            else:
+                _OPENER = urllib.request.build_opener()  # 无代理：直连
     return _OPENER
+
+
+def _macos_system_proxy() -> dict:
+    """Parse `scutil --proxy` for the HTTP(S) proxy (127.0.0.1:port).
+
+    Avoids depending on _scproxy, which PyInstaller cannot bundle (it is a
+    statically-linked builtin extension). Returns {} when no proxy is enabled.
+    """
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["scutil", "--proxy"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    fields: dict[str, str] = {}
+    for line in out.splitlines():
+        line = line.strip().rstrip(",")
+        if ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        fields[key.strip()] = val.strip()
+    if fields.get("HTTPEnable") != "1":
+        return {}
+    host = fields.get("HTTPProxy")
+    port = fields.get("HTTPPort")
+    if not host or not port:
+        return {}
+    # SOCKS/HTTP 混合端口（Clash 等）：https 走同一代理（HTTPSProxy 单独设置时除外）
+    https_host = fields.get("HTTPSProxy") or host
+    https_port = fields.get("HTTPSPort") or port
+    base = f"http://{host}:{port}"
+    https_base = f"http://{https_host}:{https_port}"
+    return {"http": base, "https": https_base}
 _max_retries = 3
 
 
