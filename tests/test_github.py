@@ -20,6 +20,10 @@ CFG_TCM = {
     "repo": "xiaopangxia/TCM-Ancient-Books", "branch": "master",
     "note": "test", "license": None,
 }
+CFG_DAIZHI = {
+    "repo": "garychowcmu/daizhigev20", "branch": "master",
+    "note": "test", "license": None,
+}
 
 
 def test_tree_paths_parse():
@@ -70,20 +74,50 @@ def test_search_aggregates_across_repos(monkeypatch, tmp_path):
     real_paths = gh._repo_paths
 
     def fake_paths(cfg):
-        if cfg["repo"].endswith("mymmsc/books"):
+        repo = cfg["repo"]
+        if repo.endswith("mymmsc/books"):
             tree = json.loads((FIX / "gbooks_tree.json").read_text(encoding="utf-8"))
-            return _paths_from_tree(tree)
-        tree = json.loads((FIX / "xp_tree.json").read_text(encoding="utf-8"))
+        elif repo.endswith("xiaopangxia/TCM-Ancient-Books"):
+            tree = json.loads((FIX / "xp_tree.json").read_text(encoding="utf-8"))
+        else:
+            tree = json.loads((FIX / "daizhi_tree.json").read_text(encoding="utf-8"))
         return _paths_from_tree(tree)
 
     monkeypatch.setattr(gh, "_repo_paths", fake_paths)
     results = gh.GithubBooks().search("本草纲目")
     assert any(b.extra["repo"] == "xiaopangxia/TCM-Ancient-Books" for b in results)
+    results2 = gh.GithubBooks().search("三十六计")
+    assert any(b.extra["repo"] == "garychowcmu/daizhigev20" for b in results2)
 
 
 def test_no_license_labeled_for_self_review():
     books = _search_paths(["013-本草纲目.txt"], CFG_TCM, "本草")
     assert "未声明" in books[0].extra["license"]
+
+
+# ---- M?: daizhigev20 (殆知阁) -----------------------------------------
+
+
+def test_daizhi_fixture_parses_and_searches():
+    """daizhigev20 fixture (real 40-item capture across all 10 cang) matches."""
+    tree = json.loads((FIX / "daizhi_tree.json").read_text(encoding="utf-8"))
+    paths = _paths_from_tree(tree)
+    assert len(paths) == 40
+    books = _search_paths(paths, CFG_DAIZHI, "三十六计")
+    assert len(books) == 1
+    b = books[0]
+    assert b.id == "garychowcmu/daizhigev20:子藏/兵家/三十六计.txt"
+    assert b.extra["repo"] == "garychowcmu/daizhigev20"
+    assert b.extra["folder"] == "子藏/兵家"
+    assert "未声明" in b.extra["license"]
+
+
+def test_daizhi_fixture_nested_folders_kept():
+    """Deep 3-level folder path (十藏/类/书名.txt) survives parsing."""
+    tree = json.loads((FIX / "daizhi_tree.json").read_text(encoding="utf-8"))
+    books = _search_paths(_paths_from_tree(tree), CFG_DAIZHI, "东坡易传")
+    assert len(books) == 1
+    assert books[0].id.endswith("易藏/易经/东坡易传.txt")
 
 
 def _seed_cache(tmp_path, repo: str, *, paths, dead: bool, age_s: float):

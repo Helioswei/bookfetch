@@ -48,6 +48,12 @@ _REPOS: list[dict] = [
         "note": "中医药古籍文本 ~700 本（神农本草经/本草纲目…，平铺 txt）",
         "license": None,  # 实测 2026-09-04: repos API spdx_id = None, ★1411
     },
+    {
+        "repo": "garychowcmu/daizhigev20",
+        "branch": "master",
+        "note": "殆知阁古代文献 txt 大全（十藏 1.5 万+ 本：易/儒/史/子/集/道/佛/医/诗/艺）",
+        "license": None,  # 实测 2026-09-07: repos API spdx_id = None, ★2904, 15.7k files
+    },
 ]
 
 _TREE_URL = "https://api.github.com/repos/{repo}/git/trees/HEAD?recursive=1"
