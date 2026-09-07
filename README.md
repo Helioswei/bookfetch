@@ -226,12 +226,13 @@ bookfetch get ctext 727782 --out ./books --simplify
 - 测试 fixture 为各源页面/结构的极小样本，仅用于解析测试，来源记录见 tests/fixtures/README.md
 - 任何权利方认为本工具对某源的使用不妥，请提 issue，我们会调整或移除该源
 
-### GitHub 精选仓库 license 实测状态（2026-09-04 探活，repos API 逐仓核对）
+### GitHub 精选仓库 license 实测状态（2026-09-07 复核，repos API 逐仓核对）
 
 | 仓库 | 内容 | license 实测 | 使用提示 |
 |---|---|---|---|
 | `mymmsc/books` | 综合资料库（含公版古籍/国学 txt，★2641） | 无 license 文件 | 公版古籍 + 公开资料汇编，使用前自审 |
 | `xiaopangxia/TCM-Ancient-Books` | 中医药古籍文本 ~700 本（★1411） | 无 license 文件 | 古籍原文公版；转录/汇编权利状态不明，使用前自审 |
+| `garychowcmu/daizhigev20` | 殆知阁古代文献 txt 大全（十藏 ~1.5 万本，★2904） | 无 license 文件 | 古籍原文公版；转录/汇编权利状态不明，使用前自审 |
 
 > search 输出中每个 github 结果带 `license` 字段；无 license 的源标注"权利状态不明，使用前自审"。
 > 健康探活：仓库若 404（被删/转私有/改名），会在缓存中标记失效并在 search 的 errors 中明确报错，**不静默返回旧索引**。

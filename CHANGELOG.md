@@ -2,6 +2,10 @@
 
 bookfetch 版本历史。版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)：0.x 为开发期（2026-09-03 ~ 09-05），1.0.0 起为稳定对外版。
 
+## Unreleased（2026-09-07，待发布）
+
+- **github 源加仓殆知阁**：`garychowcmu/daizhigev20`（十藏 ~1.5 万本古籍 txt，★2904）加入 `_REPOS`——经史子集/佛道医诗艺全覆盖，是当前最大古籍仓（此前 mymmsc 综合杂库、xiaopangxia 仅医书）。license 实测 None → README 合规表同步。138 tests 绿（+2：fixture 十藏解析搜索、深层目录保留；聚合测试扩至三仓）
+
 ## v1.0.1（2026-09-05）修复版
 
 修 CLI `--version` 显示错误（v1.0.0 发布事故：`__init__.py` 的 `__version__` 常量漏 bump，显示 0.3.0）。**根治**：删除源码 `__version__` 常量（双写结构必漏），CLI `--version` 改读安装元数据（`importlib.metadata`，源码裸跑兜底读 pyproject）——**版本单一事实源 = pyproject.toml**。发布工具链同步：`scripts/release.sh` tag 自动取 pyproject version（可选传参一致性校验），README 顶加 PyPI 版本徽章（自动更新），文档/workflows 注释去版本号化。
