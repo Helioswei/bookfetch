@@ -1,31 +1,47 @@
-"""Network + text utilities (stdlib only)."""
+"""Network + text utilities.
+
+Fetch layer rides on curl_cffi (MIT) with Chrome TLS-fingerprint impersonation:
+plain urllib advertises a Python/OpenSSL TLS fingerprint no matter what
+User-Agent header you send, which Cloudflare-class systems flag probabilistically
+(this was the likeliest cause of the intermittent biquge/ctext blocks). Also
+implements per-host circuit breaking (B) and no-blind-retry on 403 (C).
+
+Public API (used by sources/n2core, stable):
+  fetch / fetch_bytes / fetch_bytes_resumable / set_proxy
+  FetchError / HumanVerificationError / CancelledError
+  looks_like_challenge / decode_bytes / sanitize_filename / _pace
+"""
 
 from __future__ import annotations
 
 import logging
 import sys
+import threading
 import time
-import urllib.error
 import urllib.request
 from pathlib import Path
 
+from curl_cffi import requests as _creq
+
 _log = logging.getLogger("bookfetch")
 
-UA = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-)
+# Browser impersonation target: curl_cffi maps "chrome" to a recent Chrome
+# build and sends matching TLS/HTTP2 fingerprints plus its header set
+# (User-Agent, sec-ch-ua, sec-fetch-*, ...). Do NOT add a manual User-Agent —
+# that would desync header from fingerprint again.
+_IMPERSONATE = "chrome"
+_HEADERS = {"Accept-Language": "zh-CN,zh;q=0.9"}
 
 # Polite per-host pacing: some sources (ctext) block clients that hammer them.
 _MIN_INTERVAL = 2.0
 _last_request: dict[str, float] = {}
 
 # ---- runtime proxy (D1: settings panel) ---------------------------------
-# mode "system" = follow env vars + macOS system proxy (urllib default);
+# mode "system" = follow env vars + macOS system proxy (probed & passed
+# explicitly so libcurl never re-reads env behind our back);
 # mode "manual" = route everything through url; mode "none" = direct only.
 _PROXY_MODE = "system"
 _PROXY_URL = ""
-_OPENER: urllib.request.OpenerDirector | None = None
 
 
 def set_proxy(mode: str = "system", url: str = "") -> None:
@@ -34,47 +50,45 @@ def set_proxy(mode: str = "system", url: str = "") -> None:
     mode: "system" (default: env + macOS system proxy), "manual" (route all
     HTTP(S) through ``url``), or "none" (direct connection).
     """
-    global _PROXY_MODE, _PROXY_URL, _OPENER
+    global _PROXY_MODE, _PROXY_URL
     if mode not in ("system", "manual", "none"):
         raise ValueError(f"invalid proxy mode: {mode!r}")
     if mode == "manual" and not url:
         raise ValueError("manual proxy mode requires a proxy url")
     _PROXY_MODE, _PROXY_URL = mode, url
-    _OPENER = None  # rebuilt lazily with the new settings
 
 
-def _opener() -> urllib.request.OpenerDirector:
-    global _OPENER
-    if _OPENER is None:
-        if _PROXY_MODE == "manual":
-            handler = urllib.request.ProxyHandler(
-                {"http": _PROXY_URL, "https": _PROXY_URL}
-            )
-            _OPENER = urllib.request.build_opener(handler)
-        elif _PROXY_MODE == "none":
-            # Empty ProxyHandler bypasses env + system proxies entirely.
-            _OPENER = urllib.request.build_opener(
-                urllib.request.ProxyHandler({})
-            )
-        else:
-            # "system": env 优先，其次 macOS 系统代理。
-            # PyInstaller 打包后 _scproxy（静态内建扩展）缺失 → urllib 读不到
-            # 系统代理 → GUI 双击（无 shell env）直连。macOS 用 scutil 兜底。
-            proxies = urllib.request.getproxies()
-            src = "env/_scproxy"
-            if not (proxies.get("http") or proxies.get("https")):
-                sys_proxy = _macos_system_proxy()
-                if sys_proxy:
-                    proxies = sys_proxy
-                    src = "scutil"
-            _log.info("proxy mode=system resolved via %s: %s", src, proxies or "直连")
-            if proxies:
-                _OPENER = urllib.request.build_opener(
-                    urllib.request.ProxyHandler(proxies)
-                )
-            else:
-                _OPENER = urllib.request.build_opener()  # 无代理：直连
-    return _OPENER
+def _proxy_for(url: str) -> dict[str, str]:
+    """Proxies dict for a single request.
+
+    libcurl reads http(s)_proxy env vars unless CURLOPT_PROXY is explicitly
+    set — an empty-string value means "no proxy" and *overrides* env. We always
+    pass an explicit dict so behaviour is deterministic:
+      * loopback hosts always bypass (local test servers must never ride the
+        user's Clash/proxy),
+      * "manual" -> the configured url,
+      * "none"   -> empty-string values (true direct),
+      * "system" -> env first, then macOS system proxy (scutil) as the
+        PyInstaller fallback (same resolution as before, now explicit).
+    """
+    host = (url.split("://", 1)[1].split("/", 1)[0].split(":", 1)[0] if "://" in url else "")
+    if host in ("localhost", "127.0.0.1", "::1"):
+        return {"http": "", "https": ""}
+    if _PROXY_MODE == "manual":
+        return {"http": _PROXY_URL, "https": _PROXY_URL}
+    if _PROXY_MODE == "none":
+        return {"http": "", "https": ""}
+    # system
+    proxies = urllib.request.getproxies()  # env (lowercase only, urllib-safe)
+    if not (proxies.get("http") or proxies.get("https")):
+        sys_proxy = _macos_system_proxy()
+        if sys_proxy:
+            proxies = sys_proxy
+    _log.info("proxy mode=system resolved: %s", proxies or "直连")
+    return {
+        "http": proxies.get("http") or "",
+        "https": proxies.get("https") or "",
+    }
 
 
 def _macos_system_proxy() -> dict:
@@ -110,9 +124,59 @@ def _macos_system_proxy() -> dict:
     # SOCKS/HTTP 混合端口（Clash 等）：https 走同一代理（HTTPSProxy 单独设置时除外）
     https_host = fields.get("HTTPSProxy") or host
     https_port = fields.get("HTTPSPort") or port
-    base = f"http://{host}:{port}"
-    https_base = f"http://{https_host}:{https_port}"
-    return {"http": base, "https": https_base}
+    return {
+        "http": f"http://{host}:{port}",
+        "https": f"http://{https_host}:{https_port}",
+    }
+
+
+# ---- circuit breaker (B) ------------------------------------------------
+# Per-host: N consecutive source-side failures (challenge, 403, 429, network
+# error) open the breaker for a cooldown window; requests during the window
+# fail fast with a clear message instead of burning 9s of blind retries.
+# A success closes it. Shared state is locked — the GUI server fans out
+# concurrent searches across sources and threads.
+_BREAK_FAILS = 3
+_BREAK_WINDOW = 300.0  # seconds a source stays open after tripping
+_breaker: dict[str, dict] = {}  # host -> {"fails": int, "open_until": float}
+_breaker_lock = threading.Lock()
+
+
+def _breaker_open(host: str) -> float:
+    """Seconds until the breaker closes; 0.0 = closed.
+
+    Only entries with an armed ``open_until`` count as open; a host merely
+    accumulating failures (open_until == 0) is still closed and keeps its
+    failure count across calls.
+    """
+    with _breaker_lock:
+        st = _breaker.get(host)
+        if not st or st["open_until"] <= 0:
+            return 0.0
+        left = st["open_until"] - time.monotonic()
+        if left <= 0:
+            _breaker.pop(host, None)
+            return 0.0
+        return left
+
+
+def _breaker_fail(host: str) -> None:
+    with _breaker_lock:
+        st = _breaker.setdefault(host, {"fails": 0, "open_until": 0.0})
+        st["fails"] += 1
+        if st["fails"] >= _BREAK_FAILS:
+            st["open_until"] = time.monotonic() + _BREAK_WINDOW
+            st["fails"] = 0
+            _log.warning("circuit breaker OPEN for %s (%ss)", host, _BREAK_WINDOW)
+
+
+def _breaker_ok(host: str) -> None:
+    with _breaker_lock:
+        _breaker.pop(host, None)
+
+
+# ---- errors -------------------------------------------------------------
+
 _max_retries = 3
 
 
@@ -166,16 +230,39 @@ def _pace(host: str) -> None:
     _last_request[host] = time.monotonic()
 
 
+def _host_of(url: str) -> str:
+    from urllib.parse import urlparse
+
+    return urlparse(url).netloc
+
+
+def _sleep_backoff(attempt: int, *, base: float = 3.0) -> None:
+    """Exponential backoff with jitter (attempt 0 -> ~3s, 1 -> ~6s, ...)."""
+    import random
+
+    time.sleep(base * (attempt + 1) * (0.8 + 0.4 * random.random()))
+
+
+def _do_get(url: str, *, timeout: float, headers: dict | None = None,
+            stream: bool = False):
+    """One curl_cffi GET (impersonated). Callers own retry/error policy."""
+    return _creq.get(
+        url,
+        impersonate=_IMPERSONATE,
+        headers={**_HEADERS, **(headers or {})},
+        proxies=_proxy_for(url),
+        timeout=timeout,
+        stream=stream,
+    )
+
+
 def fetch(url: str, *, timeout: float = 30.0, retries: int = _max_retries) -> str:
     """GET a URL and return decoded text. Retries with backoff on failure.
 
-    A 200 human-verification page (ctext CAPTCHA, Cloudflare interstitial)
-    raises HumanVerificationError instead of silently parsing to nothing.
+    Anti-bot pages (ctext CAPTCHA, Cloudflare interstitial) raise
+    HumanVerificationError instead of silently parsing to nothing.
     """
-    text = decode_bytes(fetch_bytes(url, timeout=timeout, retries=retries))
-    if looks_like_challenge(text):
-        raise HumanVerificationError(f"GET {url} 返回人机验证页（源站反爬拦截）")
-    return text
+    return decode_bytes(fetch_bytes(url, timeout=timeout, retries=retries))
 
 
 def fetch_bytes(url: str, *, timeout: float = 30.0, retries: int = _max_retries) -> bytes:
@@ -183,39 +270,133 @@ def fetch_bytes(url: str, *, timeout: float = 30.0, retries: int = _max_retries)
 
     429 (rate limit) gets a long, Retry-After-aware backoff: sources like
     Wikimedia throttle anonymous bursts and recover in tens of seconds.
+    403 is never blind-retried (C): a 403 from the same exit IP is a block,
+    not a hiccup — report it; the circuit breaker (B) then cools the source
+    down instead of letting every concurrent search re-hit it.
     """
-    from urllib.parse import urlparse
+    host = _host_of(url)
+    left = _breaker_open(host)
+    if left > 0:
+        raise FetchError(
+            f"源站 {host} 暂时不可用（连续失败触发放问保护），约 {int(left)} 秒后自动恢复"
+        )
 
-    host = urlparse(url).netloc
     last_err: Exception | None = None
     for attempt in range(retries + 1):  # +1 spare for the 429 long-wait path
         _pace(host)
-        req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9"})
         try:
-            with _opener().open(req, timeout=timeout) as resp:
-                return resp.read()
-        except urllib.error.HTTPError as e:
+            resp = _do_get(url, timeout=timeout)
+        except _creq.errors.RequestsError as e:
             last_err = e
-            if e.code == 403 and looks_like_challenge(
-                decode_bytes(e.read(65536))
-            ):
-                # Cloudflare "Just a moment..." style block: retrying is
-                # pointless (same exit IP → same challenge). Report clearly.
+            _breaker_fail(host)
+            if attempt < retries:
+                _sleep_backoff(attempt)
+            continue
+
+        code = resp.status_code
+        if code == 200:
+            body = resp.content
+            if looks_like_challenge(decode_bytes(body[:65536])):
+                _breaker_fail(host)
+                raise HumanVerificationError(f"GET {url} 返回人机验证页（源站反爬拦截）")
+            _breaker_ok(host)
+            return body
+
+        if code == 403:
+            body = resp.content
+            _breaker_fail(host)
+            if looks_like_challenge(decode_bytes(body[:65536])):
                 raise HumanVerificationError(f"GET {url} 被源站人机验证拦截（HTTP 403）")
-            if e.code == 429:
-                wait = 10.0
-                try:
-                    wait = max(wait, float(e.headers.get("Retry-After", 10)))
-                except (TypeError, ValueError):
-                    pass
-                time.sleep(wait)
-                continue  # rate limit: wait long, then give it another go
-            if attempt < retries:
-                time.sleep(3.0 * (attempt + 1))  # 3s, 6s backoff
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            # C: non-challenge 403 = exit blocked; retrying is pointless.
+            raise FetchError(f"GET {url} 被源站拒绝（HTTP 403）")
+
+        if code == 429:
+            wait = 10.0
+            try:
+                wait = max(wait, float(resp.headers.get("Retry-After", 10)))
+            except (TypeError, ValueError):
+                pass
+            _breaker_fail(host)
+            time.sleep(wait)
+            continue  # rate limit: wait long, then give it another go
+
+        # Other 4xx/5xx: transient server-side → backoff and retry.
+        last_err = FetchError(f"GET {url} HTTP {code}")
+        _breaker_fail(host)
+        if attempt < retries:
+            _sleep_backoff(attempt)
+    raise FetchError(f"GET {url} 失败（已重试 {retries} 次）：{last_err}")
+
+
+def fetch_bytes_resumable(url: str, dest: Path, *, timeout: float = 60.0,
+                          retries: int = _max_retries) -> bytes:
+    """Stream a GET to ``dest``, resuming from a previously written partial.
+
+    B4 断点续传（2026-09-05）：dest 已有内容时带 ``Range: bytes=N-`` 续传
+    （服务器忽略 Range 返回 200 时整文件重写，稳）；完成后 dest 即完整文件。
+    网络错/超时重试间不删 dest —— 残留即下次续传的起点；只有 403 挑战页
+    （重试无用）直接抛 HumanVerificationError，不落盘。返回完整 bytes。
+    """
+    host = _host_of(url)
+    left = _breaker_open(host)
+    if left > 0:
+        raise FetchError(
+            f"源站 {host} 暂时不可用（连续失败触发放问保护），约 {int(left)} 秒后自动恢复"
+        )
+
+    last_err: Exception | None = None
+    for attempt in range(retries + 1):
+        _pace(host)
+        have = dest.stat().st_size if dest.exists() else 0
+        headers = {}
+        if have > 0:
+            headers["Range"] = f"bytes={have}-"
+        try:
+            resp = _do_get(url, timeout=timeout, headers=headers, stream=True)
+        except _creq.errors.RequestsError as e:
             last_err = e
+            _breaker_fail(host)
             if attempt < retries:
-                time.sleep(3.0 * (attempt + 1))
+                _sleep_backoff(attempt)
+            continue
+
+        code = resp.status_code
+        if code == 416 and have > 0:
+            # 已完整（Range 起点 ≥ 文件尾）：残留即成品
+            resp.close()
+            _breaker_ok(host)
+            return dest.read_bytes()
+        if code in (200, 206):
+            if code == 200:
+                have = 0  # server ignored Range → rewrite from scratch
+            try:
+                with dest.open("ab" if have > 0 else "wb") as fh:
+                    for chunk in resp.iter_content():  # curl buffers internally; no chunk_size
+                        if chunk:
+                            fh.write(chunk)
+            finally:
+                resp.close()
+            _breaker_ok(host)
+            return dest.read_bytes()
+        # HTTP errors from the source itself
+        resp.close()
+        body_head = decode_bytes(resp.content[:65536])
+        if code == 403 and looks_like_challenge(body_head):
+            _breaker_fail(host)
+            raise HumanVerificationError(f"GET {url} 被源站人机验证拦截（HTTP 403）")
+        if code == 429:
+            wait = 10.0
+            try:
+                wait = max(wait, float(resp.headers.get("Retry-After", 10)))
+            except (TypeError, ValueError):
+                pass
+            _breaker_fail(host)
+            time.sleep(wait)
+            continue
+        last_err = FetchError(f"GET {url} HTTP {code}")
+        _breaker_fail(host)
+        if attempt < retries:
+            _sleep_backoff(attempt)
     raise FetchError(f"GET {url} 失败（已重试 {retries} 次）：{last_err}")
 
 
@@ -227,60 +408,6 @@ def decode_bytes(data: bytes) -> str:
         except UnicodeDecodeError:
             continue
     return data.decode("utf-8", errors="replace")
-
-
-def fetch_bytes_resumable(url: str, dest: Path, *, timeout: float = 60.0, retries: int = _max_retries) -> bytes:
-    """Stream a GET to ``dest``, resuming from a previously written partial.
-
-    B4 断点续传（2026-09-05）：dest 已有内容时带 ``Range: bytes=N-`` 续传
-    （服务器忽略 Range 返回 200 时整文件重写，稳）；完成后 dest 即完整文件。
-    网络错/超时重试间不删 dest —— 残留即下次续传的起点；只有 403 挑战页
-    （重试无用）直接抛 HumanVerificationError，不落盘。返回完整 bytes。
-    """
-    from urllib.parse import urlparse
-
-    host = urlparse(url).netloc
-    last_err: Exception | None = None
-    for attempt in range(retries + 1):
-        _pace(host)
-        have = dest.stat().st_size if dest.exists() else 0
-        headers = {"User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9"}
-        if have > 0:
-            headers["Range"] = f"bytes={have}-"
-        req = urllib.request.Request(url, headers=headers)
-        try:
-            with _opener().open(req, timeout=timeout) as resp:
-                if resp.status == 200:
-                    have = 0  # server ignored Range → rewrite from scratch
-                with dest.open("ab" if have > 0 else "wb") as fh:
-                    while True:
-                        chunk = resp.read(1 << 16)
-                        if not chunk:
-                            break
-                        fh.write(chunk)
-                return dest.read_bytes()
-        except urllib.error.HTTPError as e:
-            last_err = e
-            if e.code == 403 and looks_like_challenge(decode_bytes(e.read(65536))):
-                raise HumanVerificationError(f"GET {url} 被源站人机验证拦截（HTTP 403）")
-            if e.code == 429:
-                wait = 10.0
-                try:
-                    wait = max(wait, float(e.headers.get("Retry-After", 10)))
-                except (TypeError, ValueError):
-                    pass
-                time.sleep(wait)
-                continue
-            if e.code == 416 and have > 0:
-                # 已完整（Range 起点 ≥ 文件尾）：残留即成品
-                return dest.read_bytes()
-            if attempt < retries:
-                time.sleep(3.0 * (attempt + 1))
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
-            last_err = e
-            if attempt < retries:
-                time.sleep(3.0 * (attempt + 1))
-    raise FetchError(f"GET {url} 失败（已重试 {retries} 次）：{last_err}")
 
 
 def sanitize_filename(name: str) -> str:

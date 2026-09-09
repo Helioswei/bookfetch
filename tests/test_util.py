@@ -1,6 +1,7 @@
 """Unit tests for shared utilities."""
 
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -138,3 +139,94 @@ def test_resumable_fresh_download(monkeypatch, tmp_path):
         assert got == _PAYLOAD
     finally:
         srv.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# A+B+C: impersonated fetch layer — 403 不重试 (C) / 熔断 (B)
+# ---------------------------------------------------------------------------
+
+class _FakeResp:
+    """Minimal stand-in for a curl_cffi response (status/content/headers)."""
+
+    def __init__(self, status_code=200, content=b"", headers=None):
+        self.status_code = status_code
+        self.content = content
+        self.headers = headers or {}
+
+    def close(self):
+        pass
+
+    def iter_content(self):
+        yield self.content
+        return
+
+
+def _breaker_reset():
+    import bookfetch.util as util
+
+    util._breaker.clear()
+
+
+def test_403_non_challenge_raises_without_retry(monkeypatch):
+    """C: 403 非挑战页 = 出口被封 → 直接抛，不再盲重试 3 次。"""
+    import bookfetch.util as util
+
+    _breaker_reset()
+    calls = []
+
+    def fake_get(url, *, timeout, headers=None, stream=False):
+        calls.append(url)
+        return _FakeResp(status_code=403, content=b"<html>Access denied by policy</html>")
+
+    monkeypatch.setattr(util, "_do_get", fake_get)
+    monkeypatch.setattr(util, "_pace", lambda host: None)
+    try:
+        with pytest.raises(util.FetchError, match="403"):
+            util.fetch_bytes("https://source.example/book")
+        assert len(calls) == 1, "403 must not be retried"
+    finally:
+        _breaker_reset()
+
+
+def test_breaker_opens_after_repeated_failures_and_fails_fast(monkeypatch):
+    """B: 连续 3 次失败 → 熔断打开；窗口内直接报错不再发请求。"""
+    import bookfetch.util as util
+
+    _breaker_reset()
+    calls = []
+
+    def fake_get(url, *, timeout, headers=None, stream=False):
+        calls.append(url)
+        raise util._creq.errors.RequestsError("boom")
+
+    monkeypatch.setattr(util, "_do_get", fake_get)
+    monkeypatch.setattr(util, "_pace", lambda host: None)
+    try:
+        # retries=0 → 每次调用恰一次失败计数
+        for _ in range(3):
+            with pytest.raises(util.FetchError):
+                util.fetch_bytes("https://flaky.example/book", retries=0)
+        assert len(calls) == 3
+        # 熔断已打开：第 4 次不触发网络请求，直接快失败
+        with pytest.raises(util.FetchError, match="暂时不可用"):
+            util.fetch_bytes("https://flaky.example/book", retries=0)
+        assert len(calls) == 3, "breaker-open must not hit the network"
+        # 窗口到期后自动放行试探：成功 → 熔断关闭
+        util._breaker["flaky.example"]["open_until"] = time.monotonic() - 1
+        monkeypatch.setattr(
+            util, "_do_get",
+            lambda url, *, timeout, headers=None, stream=False: _FakeResp(
+                status_code=200, content=b"fine"
+            ),
+        )
+        assert util.fetch_bytes("https://flaky.example/book", retries=0) == b"fine"
+        assert "flaky.example" not in util._breaker
+        # 再失败 → 计数重新累计并再次熔断
+        monkeypatch.setattr(util, "_do_get", fake_get)
+        for _ in range(3):
+            with pytest.raises(util.FetchError):
+                util.fetch_bytes("https://flaky.example/book", retries=0)
+        with pytest.raises(util.FetchError, match="暂时不可用"):
+            util.fetch_bytes("https://flaky.example/book", retries=0)
+    finally:
+        _breaker_reset()
