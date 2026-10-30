@@ -42,3 +42,4 @@ jobs:
           path: ${{ matrix.zip }}
           if-no-files-found: error
           archive: false
+          retention-days: 3
