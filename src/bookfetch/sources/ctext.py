@@ -108,6 +108,10 @@ class Ctext(Source):
         Each wiki page becomes one or more chapters: standalone 《》/卷
         heading lines split it into titled sections; a page without such
         structure stays one chapter named by its anchor.
+
+        B4 断点续传：每抓完一个 wiki 页，对该页产出的每一章回调
+        on_checkpoint(页索引, Chapter)；resume_from = 跳过前 N 个页
+        （续传时已下内容由调用方从 .part 还原）。
         """
         rid = book.id
         if not rid.isdigit():
@@ -122,6 +126,8 @@ class Ctext(Source):
         chapters: list[Chapter] = []
         all_lines: list[str] = []
         for idx, (cid, anchor) in enumerate(anchors, 1):
+            if idx - 1 < resume_from:
+                continue
             if on_progress and not on_progress(idx - 1, len(anchors)):
                 raise CancelledError()
             try:
@@ -133,15 +139,17 @@ class Ctext(Source):
                 continue
             all_lines.extend(lines)
             page_chs = split_headings(lines)
-            if page_chs:
-                chapters.extend(page_chs)
-            else:
-                chapters.append(Chapter(title=_chapter_title(anchor, idx), text="\n".join(lines)))
+            if not page_chs:
+                page_chs = [Chapter(title=_chapter_title(anchor, idx), text="\n".join(lines))]
+            chapters.extend(page_chs)
+            if on_checkpoint:
+                for c in page_chs:
+                    on_checkpoint(idx - 1, c)
 
-        if not all_lines:
+        if not all_lines and resume_from == 0:
             raise FetchError(f"no text extracted from chapters of res {rid}")
 
-        content = "\n".join(c.text for c in chapters) + "\n"
+        content = "\n".join(c.text for c in chapters) + "\n" if chapters else ""
         return FetchResult(
             source=self.name,
             id=rid,
