@@ -239,13 +239,18 @@ def test_download_cancel_sets_cancelled_status(env, monkeypatch):
         name = "cancelsrc"
 
         def fetch(self, book, *, on_progress=None, on_checkpoint=None, resume_from=0):
+            cancelled.wait(5)  # 等测试先发出 cancel，否则后台线程可能抢先跑完（偶发失败）
             if on_progress and not on_progress(0, 10):
                 raise CancelledError()  # what a real multi-chapter source does
             raise AssertionError("on_progress must have returned False after cancel")
 
+    import threading
+
+    cancelled = threading.Event()
     monkeypatch.setattr("bookfetch.n2core.get_source", lambda name: _CancelSrc())
     r = n2core.download("cancelsrc", "9", title="取消书", fmt="txt")
     st = n2core.cancel(r["task_id"])
+    cancelled.set()
     assert st["ok"] is True
     st = _wait_task(r["task_id"])
     assert st["status"] == "cancelled", st
@@ -765,11 +770,13 @@ def test_open_library_platform_dispatch(env, monkeypatch):
     monkeypatch.setattr(n2core.subprocess, "Popen", lambda cmd, **kw: calls.append(cmd))
     r = n2core.open_library()
     assert r["ok"]
-    expect = (
-        ["open", str(env / "Books")]
-        if sys.platform == "darwin"
-        else ["explorer", str(env / "Books")]
-    )
+    books = str(env / "Books")
+    if sys.platform == "darwin":
+        expect = ["open", books]
+    elif sys.platform.startswith("win"):
+        expect = ["explorer", books]
+    else:
+        expect = ["xdg-open", books]  # Linux：与 n2core.open_library 一致
     assert calls == [expect]
 
 
