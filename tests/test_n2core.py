@@ -281,7 +281,8 @@ def test_download_queue_caps_concurrency_and_queued_cancel(env, monkeypatch):
             )
 
     monkeypatch.setattr("bookfetch.n2core.get_source", lambda name: _GateSrc())
-    ids = [n2core.download("gatesrc", str(i), title=f"门卫{i}", fmt="txt")["task_id"] for i in range(4)]
+    # 不同书源（同源串行另有测试）：验证的是跨源全局上限 3
+    ids = [n2core.download(f"gatesrc{i}", str(i), title=f"门卫{i}", fmt="txt")["task_id"] for i in range(4)]
     try:
         t0 = time.time()
         while len(active) < 3 and time.time() - t0 < 5:
@@ -295,6 +296,45 @@ def test_download_queue_caps_concurrency_and_queued_cancel(env, monkeypatch):
         gate.set()  # 释放卡住的 fetch，防槽位泄漏卡死后续测试
     for tid in ids[:3]:
         assert _wait_task(tid)["status"] == "done"
+
+
+def test_download_same_source_runs_one_at_a_time(env, monkeypatch):
+    """同源串行：同一书源同时只跑一个下载，其余 queued；排队中可取消；不同源不受影响。"""
+    import threading
+
+    gate = threading.Event()
+    active = []
+
+    class _GateSrc:
+        def fetch(self, book, *, on_progress=None, on_checkpoint=None, resume_from=0):
+            active.append(book.id)
+            gate.wait(5)
+            return FetchResult(
+                source=book.source, id=book.id, title=f"同源{book.id}",
+                chars=4, lines=1, format="txt",
+                content="正文", chapters=[Chapter("章", "正文")],
+            )
+
+    monkeypatch.setattr("bookfetch.n2core.get_source", lambda name: _GateSrc())
+    a = n2core.download("samesite", "a", title="同源a")["task_id"]
+    b = n2core.download("samesite", "b", title="同源b")["task_id"]
+    c = n2core.download("samesite", "c", title="同源c")["task_id"]
+    other = n2core.download("othersite", "x", title="他源x")["task_id"]
+    try:
+        t0 = time.time()
+        while len(active) < 2 and time.time() - t0 < 5:
+            time.sleep(0.02)
+        time.sleep(0.3)  # 给同源第二个任务“抢跑”的机会——不应发生
+        assert sorted(active) == ["a", "x"], active
+        assert n2core.task_status(b)["status"] == "queued"
+        assert n2core.task_status(c)["status"] == "queued"
+        assert n2core.cancel(c)["ok"] is True
+        assert _wait_task(c)["status"] == "cancelled"  # 排队中取消不必等前一个跑完
+    finally:
+        gate.set()
+    for tid in (a, b, other):
+        assert _wait_task(tid)["status"] == "done"
+    assert active.count("b") == 1 and "c" not in active
 
 
 def test_b4_partial_survives_cancel_and_resumes(env, monkeypatch):
