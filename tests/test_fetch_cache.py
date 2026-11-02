@@ -72,7 +72,7 @@ class _FakeSrc:
     def __init__(self):
         self.calls = 0
 
-    def fetch(self, book):
+    def fetch(self, book, *, on_progress=None, on_checkpoint=None, resume_from=0):
         self.calls += 1
         return FetchResult(
             source=book.source, id=book.id, title="假书",

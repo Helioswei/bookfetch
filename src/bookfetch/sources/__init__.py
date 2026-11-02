@@ -16,7 +16,20 @@ _REGISTRY: dict[str, Source] = {}
 
 def _register(src: Source) -> Source:
     _REGISTRY[src.name] = src
+    apply_source_pacing(src)
     return src
+
+
+def apply_source_pacing(src: Source) -> None:
+    """Push a source's ``min_interval`` into util's per-host pacing table."""
+    from ..util import set_host_interval
+
+    iv = getattr(src, "min_interval", None)
+    if iv is None:
+        return
+    lo, hi = (iv, iv * 2) if isinstance(iv, (int, float)) else iv
+    for host in getattr(src, "hosts", ()):
+        set_host_interval(host, lo, hi)
 
 
 _register(Biquge())

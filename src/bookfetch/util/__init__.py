@@ -10,6 +10,7 @@ Public API (used by sources/n2core, stable):
   fetch / fetch_bytes / fetch_bytes_resumable / set_proxy
   FetchError / HumanVerificationError / CancelledError
   looks_like_challenge / decode_bytes / sanitize_filename / _pace
+  set_pacing / set_host_interval / pace_interval
 """
 
 from __future__ import annotations
@@ -32,9 +33,58 @@ _log = logging.getLogger("bookfetch")
 _IMPERSONATE = "chrome"
 _HEADERS = {"Accept-Language": "zh-CN,zh;q=0.9"}
 
-# Polite per-host pacing: some sources (ctext) block clients that hammer them.
-_MIN_INTERVAL = 2.0
+# Polite per-host pacing: some sources (ctext/biquge) block clients that hammer
+# them. 2026-11 防封加固：间隔随机化（默认 2–4s，固定节拍易被识别）、每 host
+# 一把锁（多线程同 host 严格串行，不再并发抢跑）、每 ~100 次请求长休一次
+# （30–60s，长篇连续下载最易被标记）。优先级：set_pacing 全局覆盖（CLI --delay）
+# > set_host_interval 源级设置（Source.min_interval）> 默认。
+_MIN_INTERVAL = 2.0          # 默认间隔下限（秒）
+_MAX_INTERVAL = 4.0          # 默认间隔上限（秒）
+_REST_EVERY = 100            # 每 host 每 N 次请求长休一次（≈ N 章）；0 = 关闭
+_REST_RANGE = (30.0, 60.0)   # 长休时长（秒）
 _last_request: dict[str, float] = {}
+_req_count: dict[str, int] = {}
+_host_interval: dict[str, tuple[float, float]] = {}
+_override_interval: tuple[float, float] | None = None
+_pace_locks: dict[str, threading.Lock] = {}
+_pace_locks_guard = threading.Lock()
+
+
+def _norm_interval(lo: float, hi: float | None) -> tuple[float, float]:
+    lo = float(lo)
+    hi = lo if hi is None else float(hi)
+    if lo < 0 or hi < lo:
+        raise ValueError(f"invalid pacing interval: {lo}-{hi}")
+    return lo, hi
+
+
+def set_pacing(lo: float | None = None, hi: float | None = None) -> None:
+    """Process-wide request interval override (CLI ``--delay``); None = clear.
+
+    ``hi`` omitted -> fixed interval ``lo``. Wins over per-source settings.
+    """
+    global _override_interval
+    _override_interval = None if lo is None else _norm_interval(lo, hi)
+
+
+def set_host_interval(host: str, lo: float, hi: float | None = None) -> None:
+    """Per-host (per-source) interval, e.g. from ``Source.min_interval``."""
+    _host_interval[host] = _norm_interval(lo, hi)
+
+
+def pace_interval(host: str) -> tuple[float, float]:
+    """Effective (min, max) seconds between two requests to ``host``."""
+    if _override_interval is not None:
+        return _override_interval
+    return _host_interval.get(host, (_MIN_INTERVAL, _MAX_INTERVAL))
+
+
+def _pace_lock(host: str) -> threading.Lock:
+    with _pace_locks_guard:
+        lk = _pace_locks.get(host)
+        if lk is None:
+            lk = _pace_locks[host] = threading.Lock()
+        return lk
 
 # ---- runtime proxy (D1: settings panel) ---------------------------------
 # mode "system" = follow env vars + macOS system proxy (probed & passed
@@ -222,12 +272,27 @@ def looks_like_challenge(text: str) -> bool:
 
 
 def _pace(host: str) -> None:
-    now = time.monotonic()
-    last = _last_request.get(host, 0.0)
-    wait = _MIN_INTERVAL - (now - last)
-    if wait > 0:
-        time.sleep(wait)
-    _last_request[host] = time.monotonic()
+    """Wait until ``host`` may be hit again (thread-safe, randomized).
+
+    The per-host lock is held across the sleep, so concurrent threads hitting
+    the same host are strictly serialized and each keeps the full interval.
+    """
+    import random
+
+    with _pace_lock(host):
+        lo, hi = pace_interval(host)
+        interval = random.uniform(lo, hi) if hi > lo else lo
+        n = _req_count.get(host, 0) + 1
+        _req_count[host] = n
+        if _REST_EVERY and n % _REST_EVERY == 0:
+            rest = random.uniform(*_REST_RANGE)
+            _log.info("pacing: %s reached %d requests, resting %.0fs", host, n, rest)
+            interval = max(interval, rest)
+        last = _last_request.get(host)
+        wait = interval - (time.monotonic() - last) if last is not None else 0.0
+        if wait > 0:
+            time.sleep(wait)
+        _last_request[host] = time.monotonic()
 
 
 def _host_of(url: str) -> str:

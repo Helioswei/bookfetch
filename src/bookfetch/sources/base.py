@@ -13,6 +13,10 @@ class Source(ABC):
 
     name: str = "base"
     label: str = "未知书源"  # user-facing Chinese label (D1 decision A)
+    # 源级请求间隔（秒）：None = 用全局默认（util 2–4s 随机）；float = 固定下限
+    # 并按 1–2 倍随机；(lo, hi) = 显式区间。作用于 ``hosts`` 列出的站点。
+    min_interval: float | tuple[float, float] | None = None
+    hosts: tuple[str, ...] = ()
 
     @abstractmethod
     def search(self, query: str) -> list[Book]:

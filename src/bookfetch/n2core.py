@@ -298,30 +298,74 @@ class _Job:
     total: int = 0
 
 
-# ═══════ CLI/UI 边界（2026-09-05 少爷拍板，勿破）═══════════════════════════
+# ═══════ CLI/UI 边界（2026-09-05 少爷拍板；2026-11 修订）════════════════════
 # 本文件 = UI 后端（serve 浏览器 / gui 桌面壳共用）：任务系统、并发队列、
-# 逐章断点续传、边下边读 .part 全部是 UI 用户的体验机制，**只作用于本模块
-# 的 download() 后台任务**。CLI `bookfetch get`（cli.py main get 分支）是
-# 独立同步直连：src.fetch(book) 一步到底，不经 download()/_run_job()/本队列，
-# 因此 agent 脚本并发跑多个 CLI 进程互不排队、无上限、不产生 .part。
+# 同源串行**只作用于本模块的 download() 后台任务**。CLI `bookfetch get`
+# （cli.py main get 分支）仍是独立同步直连：不经 download()/_run_job()/本队列，
+# agent 脚本并发跑多个 CLI 进程互不排队。
+# 2026-11 修订（少爷要求「命令行和桌面保持一样」）：逐章断点续传 + .part 边下边读
+# 抽到 fetch_cache.Checkpoint，CLI get 与本模块共用同一实现（CLI 落在 --out 目录）。
 # 防回归锁 = tests/test_cli_ui_boundary.py（哨兵断言 CLI 路径零触碰本任务系统）。
-# 给 CLI get 引入队列/断点/任何 UI 语义前，先确认那条边界仍成立。
 # ══════════════════════════════════════════════════════════════════════════
 # 并发队列（B4 落地，2026-09-05）：UI 下载并发上限 3，超出排队（queued）。
 # 多书多源可并行，但不再无上限叠线程打爆单源/带宽。
 _SLOTS = threading.Semaphore(3)
 
 
-def _run_job(job: _Job) -> None:
-    try:
-        _SLOTS.acquire()
-        try:
+# 同源串行（2026-11 防封）：同一书源同时只跑一个下载任务，其余按提交顺序排队
+# （queued）。并发打同一站点是触发反爬/封 IP 的主因之一；不同书源仍可并行
+# （受 _SLOTS 上限）。已缓存的书不发网络请求，不占同源名额。
+_SITE_COND = threading.Condition()
+_SITE_QUEUE: dict[str, list[str]] = {}  # source -> [job.id, ...]，队首 = 正在跑
+
+
+def _site_enqueue(job: _Job) -> None:
+    with _SITE_COND:
+        _SITE_QUEUE.setdefault(job.source, []).append(job.id)
+
+
+def _site_leave(job: _Job) -> None:
+    with _SITE_COND:
+        q = _SITE_QUEUE.get(job.source, [])
+        if job.id in q:
+            q.remove(job.id)
+        if not q:
+            _SITE_QUEUE.pop(job.source, None)
+        _SITE_COND.notify_all()
+
+
+def _site_wait_turn(job: _Job) -> None:
+    """等到本任务排到同源队首；排队期间可被取消（不必等前面的任务跑完）。"""
+    with _SITE_COND:
+        while _SITE_QUEUE.get(job.source, [job.id])[0] != job.id:
             if job.cancel:
                 raise CancelledError()
-            job.status = "running"
-            _run_job_inner(job)
+            _SITE_COND.wait(0.1)
+
+
+def _acquire_cancellable(lock, job: _Job) -> None:
+    """排队等全局槽位；排队期间可被取消。"""
+    while not lock.acquire(timeout=0.1):
+        if job.cancel:
+            raise CancelledError()
+
+
+def _run_job(job: _Job, site_queued: bool = False) -> None:
+    try:
+        try:
+            if site_queued:
+                _site_wait_turn(job)
+            _acquire_cancellable(_SLOTS, job)
+            try:
+                if job.cancel:
+                    raise CancelledError()
+                job.status = "running"
+                _run_job_inner(job)
+            finally:
+                _SLOTS.release()
         finally:
-            _SLOTS.release()
+            if site_queued:
+                _site_leave(job)
     except CancelledError:
         job.status = "cancelled"
         job.message = "已取消"
@@ -338,58 +382,26 @@ def _run_job_inner(job: _Job) -> None:
         raise ValueError(f"unknown source {job.source!r}")
     book = Book(source=job.source, id=job.book_id, title=job.title)
     fr = fetch_cache.load(job.source, job.book_id)
-    part = meta_path = None
+    ckpt = None
     if fr is None:
-        part, resume_from = _partial_state(book)
-        meta_path = library_dir() / f"{_partial_fname(book)}.txt.part.meta"
-        if resume_from == 0 and part is not None and part.exists():
-            # 从头下载但 .part 有残留（meta 损坏/版本不匹配被清）：先清空重下，
-            # 否则 on_checkpoint 会把新内容 append 进旧半成品 → 混版/章节重复
-            part.unlink(missing_ok=True)
-            if meta_path is not None:
-                meta_path.unlink(missing_ok=True)
+        # B4 断点续传/边下边读：逻辑统一在 fetch_cache.Checkpoint（CLI get 共用）
+        ckpt = fetch_cache.Checkpoint(library_dir(), book, fmt=job.fmt)
+        resume_from = ckpt.prepare()
 
         def on_progress(done: int, total: int) -> bool:
             job.done, job.total = done, total
             return not job.cancel
 
         def on_checkpoint(index: int, c: Chapter) -> None:
-            # B4 边下边读：每成功一章 → 更新 meta（续传点）+ 增量追加库内 .part
+            # 每成功一章 → 更新 meta（续传点）+ 增量追加库内 .part
             # meta 存完整任务元信息（source/id/title/fmt）——书架「继续下载」靠它
-            # 还原 download() 参数（resume_partial）；旧版只有 source+index 也能续传，
-            # 但缺 id 无法从书架一键恢复（需按书名搜索找回，见 resume_partial）。
-            if part is None:
-                return
-            meta_path.write_text(
-                json.dumps(
-                    {
-                        "source": job.source,
-                        "id": job.book_id,
-                        "title": job.title,
-                        "fmt": job.fmt,
-                        "index": index,
-                    },
-                    ensure_ascii=False,
-                ),
-                encoding="utf-8",
-            )
-            head = f"=== {c.title} ===\n{c.text}"
-            with part.open("a", encoding="utf-8") as fh:
-                if part.stat().st_size == 0:
-                    fh.write(head)
-                else:
-                    fh.write("\n\n" + head)
+            # 还原 download() 参数（resume_partial）
+            ckpt.write(index, c)
             job.done = index + 1
 
         job.message = "抓取中…"
         fr = src.fetch(book, on_progress=on_progress, on_checkpoint=on_checkpoint, resume_from=resume_from)
-        if resume_from > 0 and part is not None and part.exists():
-            # 续传：.part 已含 prior + 本次新增（checkpoint 全程 append）→ 直接还原全量
-            prior = split_rendered(part.read_text(encoding="utf-8"))
-            if prior:
-                fr.chapters = prior
-                fr.content = "\n\n".join(c.text for c in prior)
-                fr.chars = len(fr.content)
+        fr = ckpt.merge(fr, resume_from)
         fetch_cache.save(job.source, job.book_id, fr)
     if fr.raw is not None:
         # binary passthrough: _render_get saves the original .epub/.pdf
@@ -403,49 +415,24 @@ def _run_job_inner(job: _Job) -> None:
     ns = Namespace(out=str(library_dir()), format=fmt, simplify=simp, split=split)
     fr = _render_get(src, fr, ns)
     job.out_rel = library_rel(Path(fr.out_path))
-    if part is not None:  # 完成：清 B4 边读/断点残留（正式书已入库）
-        part.unlink(missing_ok=True)
-        if meta_path is not None:
-            meta_path.unlink(missing_ok=True)
+    if ckpt is not None:  # 完成：清 B4 边读/断点残留（正式书已入库）
+        ckpt.clear()
     job.status = "done"
     job.message = f"{fr.chars:,} chars · {len(_ensure_chapters(fr))} chapters"
 
 
 def _partial_fname(book: Book) -> str:
     """B4 库内边读/断点文件基名 —— 与正式渲染同名规则（sanitize 书名）。"""
-    return sanitize_filename(book.title) or f"{book.source}-{book.id}"
+    return fetch_cache.partial_fname(book)
 
 
 def _partial_state(book: Book) -> tuple[Path, int]:
     """B4 断点状态：(库内 .part 候选路径, resume_from toc 索引)。
 
-    .part 路径始终返回——首次下载也由 on_checkpoint 创建（边下边读起点）；
-    resume_from 仅当 meta 有效（source 匹配 + 整数索引）且 .part 在位才 >0；
-    meta 损坏/孤儿 → 清掉从头下，防误续。
+    薄封装 fetch_cache.Checkpoint（规则见其 resume_index）。
     """
-    fname = _partial_fname(book)
-    part = library_dir() / f"{fname}.txt.part"
-    meta = library_dir() / f"{fname}.txt.part.meta"
-    if not part.exists():
-        meta.unlink(missing_ok=True)  # .part 被清（手动/完成）→ meta 一并作废
-        return part, 0
-    if meta.exists():
-        try:
-            m = json.loads(meta.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            m = None
-        m_id = m.get("id") if isinstance(m, dict) else None
-        if (
-            isinstance(m, dict)
-            and m.get("source") == book.source
-            and isinstance(m.get("index"), int)
-            # meta 带 id 时精确绑定任务（防同源同名不同版本误续——biquge 转载版
-            # 同名多条目实测）；旧 meta 无 id 退化 source+书名 匹配（存量兼容）
-            and (m_id is None or m_id == book.id)
-        ):
-            return part, int(m["index"]) + 1
-        meta.unlink(missing_ok=True)  # 损坏/孤儿/版本不匹配：清掉，避免误续
-    return part, 0
+    ckpt = fetch_cache.Checkpoint(library_dir(), book)
+    return ckpt.part, ckpt.resume_index()
 
 
 def download(source: str, id: str, title: str = "", fmt: str = "txt") -> dict:
@@ -454,7 +441,11 @@ def download(source: str, id: str, title: str = "", fmt: str = "txt") -> dict:
         _TASK_ID += 1
         job = _Job(id=f"t{_TASK_ID}", source=source, book_id=id, title=title, fmt=fmt)
         _TASKS[job.id] = job  # same object the worker thread updates
-        threading.Thread(target=_run_job, args=(job,), daemon=True).start()
+        # 同源串行：入队顺序 = 提交顺序（在 _LOCK 内，与 task id 一致）
+        site_queued = not fetch_cache.cache_path(source, id).exists()
+        if site_queued:
+            _site_enqueue(job)
+        threading.Thread(target=_run_job, args=(job, site_queued), daemon=True).start()
         return {"task_id": job.id}
 
 

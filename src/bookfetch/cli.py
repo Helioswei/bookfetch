@@ -12,7 +12,7 @@ from pathlib import Path
 from . import fetch_cache
 from .model import Book, Chapter, FetchResult
 from .sources import get_source, search_all, source_names
-from .util import FetchError, sanitize_filename
+from .util import FetchError, sanitize_filename, set_pacing
 from .util.epub import build_epub
 from .util.simplify import to_simplified
 from .util.splitters import split_headings
@@ -140,6 +140,21 @@ def _render_get(src, fr: FetchResult, args) -> FetchResult:
     return fr
 
 
+def _parse_delay(v: str) -> tuple[float, float]:
+    """--delay 3 → (3, 3)；--delay 2-4 → (2, 4)。"""
+    try:
+        if "-" in v:
+            lo_s, hi_s = v.split("-", 1)
+            lo, hi = float(lo_s), float(hi_s)
+        else:
+            lo = hi = float(v)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid --delay {v!r} (use e.g. 3 or 2-4)") from None
+    if lo < 0 or hi < lo:
+        raise argparse.ArgumentTypeError(f"invalid --delay {v!r} (need 0 <= MIN <= MAX)")
+    return lo, hi
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="bookfetch", description=DESC)
     p.add_argument("--version", action="version", version=f"bookfetch {_pkg_version()}")
@@ -155,7 +170,7 @@ def main(argv: list[str] | None = None) -> int:
     gp.add_argument("source", help="source name, e.g. ctext")
     gp.add_argument("id", help="edition id from search results")
     gp.add_argument("--title", default="", help="optional title override for the output filename")
-    gp.add_argument("--force", action="store_true", help="re-fetch even if this edition is already cached")
+    gp.add_argument("--force", action="store_true", help="re-fetch even if this edition is already cached (also discards an interrupted partial download)")
     gp.add_argument("--out", default=".", help="output directory (default: current dir)")
     gp.add_argument(
         "--format",
@@ -172,6 +187,14 @@ def main(argv: list[str] | None = None) -> int:
         "--simplify",
         action="store_true",
         help="convert Traditional Chinese to Simplified (requires the [simp] extra: OpenCC)",
+    )
+    gp.add_argument(
+        "--delay",
+        type=_parse_delay,
+        default=None,
+        metavar="SEC|MIN-MAX",
+        help="seconds between requests to the same site: fixed (e.g. 3) or random range "
+        "(e.g. 2-4); default 2-4 random, plus a 30-60s rest every ~100 requests",
     )
     gp.add_argument("--human", action="store_true", help="human-readable output")
 
@@ -214,17 +237,35 @@ def main(argv: list[str] | None = None) -> int:
             if src is None:
                 raise ValueError(f"unknown source {args.source!r} (known: {', '.join(source_names())})")
             book = Book(source=args.source, id=args.id, title=args.title)
+            if args.delay is not None:
+                set_pacing(*args.delay)
+            else:
+                set_pacing(None)
             cached = False
+            resume_from = 0
+            ckpt = None
             fr = fetch_cache.load(args.source, args.id) if not args.force else None
             if fr is None:
-                fr = src.fetch(book)
+                # 逐章断点续传（与桌面 App 同一实现 fetch_cache.Checkpoint）：
+                # 每成功一章追加 --out/<书名>.txt.part + 写 .part.meta 续传点；
+                # 中断（Ctrl-C/网络/人机验证）后重跑同一条 get 自动从断点继续。
+                ckpt = fetch_cache.Checkpoint(Path(args.out), book, fmt=args.format)
+                if args.force:
+                    ckpt.clear()
+                resume_from = ckpt.prepare()
+                fr = src.fetch(book, on_checkpoint=ckpt.write, resume_from=resume_from)
+                fr = ckpt.merge(fr, resume_from)
                 fetch_cache.save(args.source, args.id, fr)
             else:
                 cached = True
                 fr.out_path = ""
             fr = _render_get(src, fr, args)
+            if ckpt is not None:  # 正式书已落盘：清断点残留
+                ckpt.clear()
             d = fr.to_dict()
             d["cached"] = cached
+            if resume_from:
+                d["resumed_from"] = resume_from
             obj = {"cmd": "get", "result": d}
 
         if getattr(args, "human", False) and args.cmd == "search":

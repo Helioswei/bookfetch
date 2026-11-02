@@ -4,6 +4,8 @@ bookfetch 版本历史。版本号遵循 [SemVer](https://semver.org/lang/zh-CN/
 
 ## Unreleased（2026-09-07，待发布）
 
+- **CLI 断点续传**：`bookfetch get` 逐章写 `--out/<书名>.txt.part` + `.part.meta`，中断后重跑同一命令自动续传（与桌面「继续下载」同一实现 `fetch_cache.Checkpoint`）；`--force` 丢弃半成品。ctext 新增 `on_checkpoint`/`resume_from` 支持（此前仅 biquge）
+- **请求节奏（防封）**：每 host 一把锁（多线程同站严格串行）、默认间隔 2–4s 随机、每 ~100 次请求长休 30–60s；新增 CLI `--delay SEC|MIN-MAX`；`Source.min_interval` 源级间隔能力（内置源未设置，策略不变）；桌面端同一源同时只跑一个下载任务，其余排队（FIFO，可取消）。后续事项见 `docs/TODO-anti-block.md`
 - **github 源加仓殆知阁**：`garychowcmu/daizhigev20`（十藏 ~1.5 万本古籍 txt，★2904）加入 `_REPOS`——经史子集/佛道医诗艺全覆盖，是当前最大古籍仓（此前 mymmsc 综合杂库、xiaopangxia 仅医书）。license 实测 None → README 合规表同步。138 tests 绿（+2：fixture 十藏解析搜索、深层目录保留；聚合测试扩至三仓）
 
 ## v1.0.1（2026-09-05）修复版

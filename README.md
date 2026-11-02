@@ -144,6 +144,21 @@ bookfetch get ctext 727782 --split --out ./books    # txt 中插入 === 章节 =
 `epub` 与 `--split` 的章节来自源结构（ctext 分页）或《》/卷/序跋类标题行自动识别；
 正文一字不改，标题行仅在阅读视图去重。
 
+#### 断点续传与请求节奏
+
+长篇下载中断（Ctrl-C、断网、遇到人机验证）后，**重跑同一条 `get` 命令即可从断点继续**——
+与桌面 App「继续下载」是同一实现：进度逐章写入 `--out` 目录下的 `<书名>.txt.part`
+（及 `.part.meta`），完成后自动清理；加 `--force` 则丢弃半成品从头下载。
+目前 biquge、ctext 支持续传，其他源中断后从头下载。
+
+对同一网站的请求默认间隔 2–4 秒（随机），约每 100 次请求额外休息 30–60 秒。
+可用 `--delay` 调整：
+
+```bash
+bookfetch get ctext 727782 --out ./books --delay 5      # 固定 5 秒
+bookfetch get ctext 727782 --out ./books --delay 3-6    # 3–6 秒随机
+```
+
 #### 繁转简（可选）
 
 默认保留古籍繁体原文；需要简体版时加 `--simplify`（需先装可选依赖）：
